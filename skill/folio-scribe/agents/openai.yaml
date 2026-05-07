@@ -1,0 +1,3 @@
+display_name: Folio Scribe
+short_description: Broker data to portfolio journals
+default_prompt: Use broker data to create today's trading plan and sync it to my journal.

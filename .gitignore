@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.codex/
+dist/
+build/
+*.egg-info/
+.DS_Store
+*.log
+.env
+local_config.toml
+sample_data/private/
+docs/private/
+
+# Local broker gateways and private trading configuration
+FutuOpenD.xml
+Futu_OpenD*/
+FutuOpenD.app/
+.com.futunn.FutuOpenD/
+*.dmg
+*.tar.gz

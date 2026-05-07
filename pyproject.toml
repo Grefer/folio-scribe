@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "folio-scribe"
+version = "0.1.0"
+description = "Broker data to trading plans, reviews, watchlists, and Obsidian journals."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Folio Scribe contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+futu = ["futu-api>=9"]
+dev = ["pyyaml>=6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
