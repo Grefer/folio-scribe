@@ -48,6 +48,20 @@ Before relying on OpenD:
 - Confirm the intended market/account context when multiple accounts, currencies, or trading environments are visible.
 - Keep Futu-derived order entry, order modification, order cancellation, watchlist edits, and price-alert changes disabled unless the user separately and explicitly asks for that action.
 
+When the local `folio_scribe` Python package is available, use the read-only
+OpenD snapshot helper to gather structured data for any client that can run
+local commands:
+
+```bash
+python3 skill/folio-scribe/scripts/read_futu_snapshot.py US.AAPL --counts-only
+python3 -m folio_scribe.futu_snapshot US.AAPL HK.00700
+```
+
+Use `--counts-only` for connectivity checks. For actual plans or reviews, read
+the full JSON and summarize only the fields relevant to the user's requested
+workflow. Do not print sensitive account details unless the user explicitly
+needs them in the final output.
+
 Use Futu capabilities as inputs to the Folio Scribe workflow:
 
 - **Portfolio and account**: account assets, cash, buying power, margin, positions, P/L, working orders, fills.

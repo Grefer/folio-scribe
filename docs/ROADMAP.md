@@ -10,12 +10,12 @@
 
 ## Milestone 2: Futu Read-Only Connector
 
-- [ ] Connect to local OpenD.
+- [x] Connect to local OpenD.
 - [ ] Add OpenD readiness checks for login state, host, port, and account context.
-- [ ] Read account summary.
-- [ ] Read positions.
-- [ ] Read working orders and fills.
-- [ ] Read quote snapshots for configured symbols.
+- [x] Read account summary.
+- [x] Read positions.
+- [x] Read working orders and fills.
+- [x] Read quote snapshots for configured symbols.
 - [ ] Read order book, ticks, and K-line snapshots when requested.
 - [ ] Read option-chain snapshots.
 - [ ] Ingest Futu news, comment sentiment, capital-flow anomalies, derivatives anomalies, technical signals, and sector context as optional risk/watchlist inputs.

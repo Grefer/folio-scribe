@@ -16,5 +16,8 @@ dependencies = []
 futu = ["futu-api>=9"]
 dev = ["pyyaml>=6"]
 
+[project.scripts]
+folio-scribe-futu-snapshot = "folio_scribe.futu_snapshot:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
