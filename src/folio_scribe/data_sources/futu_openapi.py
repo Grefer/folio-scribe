@@ -18,6 +18,14 @@ def _decimal(value: Any) -> Decimal | None:
         return None
 
 
+def _first_present(row: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
 class FutuOpenAPIDataSource:
     """Read-only Futu OpenAPI data source scaffold.
 
@@ -209,9 +217,9 @@ def account_from_rows(rows: Sequence[dict[str, Any]]) -> AccountSnapshot:
     row = dict(rows[0])
     return AccountSnapshot(
         total_assets=_decimal(row.get("total_assets")),
-        daily_pnl=_decimal(row.get("today_pl_val") or row.get("daily_pnl")),
+        daily_pnl=_decimal(_first_present(row, "today_pl_val", "daily_pnl")),
         cash=_decimal(row.get("cash")),
-        buying_power=_decimal(row.get("power") or row.get("buying_power")),
+        buying_power=_decimal(_first_present(row, "power", "buying_power")),
         leverage=_decimal(row.get("leverage")),
         currency=row.get("currency"),
         raw=row,
@@ -234,11 +242,11 @@ def positions_from_rows(rows: Sequence[dict[str, Any]]) -> list[Position]:
             Position(
                 symbol=symbol,
                 name=row.get("stock_name") or row.get("name"),
-                quantity=_decimal(row.get("qty") or row.get("quantity")),
-                cost=_decimal(row.get("cost_price") or row.get("cost")),
-                market_value=_decimal(row.get("market_val") or row.get("market_value")),
-                unrealized_pnl=_decimal(row.get("unrealized_pl") or row.get("pl_val") or row.get("unrealized_pnl")),
-                realized_pnl=_decimal(row.get("realized_pl") or row.get("realized_pnl")),
+                quantity=_decimal(_first_present(row, "qty", "quantity")),
+                cost=_decimal(_first_present(row, "cost_price", "cost")),
+                market_value=_decimal(_first_present(row, "market_val", "market_value")),
+                unrealized_pnl=_decimal(_first_present(row, "unrealized_pl", "pl_val", "unrealized_pnl")),
+                realized_pnl=_decimal(_first_present(row, "realized_pl", "realized_pnl")),
                 portfolio_weight=_decimal(row.get("portfolio_weight")),
                 currency=row.get("currency"),
                 raw=dict(row),
@@ -257,7 +265,7 @@ def orders_from_rows(rows: Sequence[dict[str, Any]]) -> list[Order]:
             Order(
                 symbol=symbol,
                 side=row.get("trd_side") or row.get("side"),
-                quantity=_decimal(row.get("qty") or row.get("quantity")),
+                quantity=_decimal(_first_present(row, "qty", "quantity")),
                 price=_decimal(row.get("price")),
                 status=row.get("order_status") or row.get("status"),
                 submitted_at=_parse_datetime(row.get("create_time") or row.get("submitted_at")),
@@ -277,7 +285,7 @@ def fills_from_rows(rows: Sequence[dict[str, Any]]) -> list[Fill]:
             Fill(
                 symbol=symbol,
                 side=row.get("trd_side") or row.get("side"),
-                quantity=_decimal(row.get("qty") or row.get("quantity")),
+                quantity=_decimal(_first_present(row, "qty", "quantity")),
                 price=_decimal(row.get("price")),
                 filled_at=_parse_datetime(row.get("create_time") or row.get("filled_at")),
                 raw=dict(row),

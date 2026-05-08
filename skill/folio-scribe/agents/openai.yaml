@@ -1,0 +1,4 @@
+interface:
+  display_name: "Folio Scribe"
+  short_description: "Trading plans, reviews, and journal sync"
+  default_prompt: "Use $folio-scribe to create a session-aware trading plan from my broker data and update my journal."

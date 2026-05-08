@@ -5,7 +5,7 @@
 #
 # Checks:
 #   1. Python ≥ 3.10 available
-#   2. folio-scribe package importable
+#   2. bundled scripts runnable
 #   3. Claude CLI installed and on PATH
 #   4. Obsidian vault exists with Daily/ directory
 #   5. Futu OpenD reachable on expected port
@@ -62,13 +62,13 @@ echo "Package:"
 if python3 -c "import folio_scribe" &>/dev/null; then
     pass "folio_scribe importable"
 else
-    fail "folio_scribe not importable (run: pip install -e .)"
+    warn "folio_scribe package not importable (optional; bundled scripts are standalone)"
 fi
 
 if python3 -c "from folio_scribe.journal.obsidian import write_daily_note" &>/dev/null; then
     pass "journal.obsidian module"
 else
-    fail "journal.obsidian module not importable"
+    warn "journal.obsidian module not importable (optional package API)"
 fi
 
 # ── 3. Claude CLI ───────────────────────────────────────────────────
@@ -158,9 +158,13 @@ else
 fi
 
 if [ -f "$SCRIPT_DIR/read_futu_snapshot.py" ]; then
-    pass "read_futu_snapshot.py present"
+    if python3 "$SCRIPT_DIR/read_futu_snapshot.py" --help &>/dev/null; then
+        pass "read_futu_snapshot.py runnable"
+    else
+        fail "read_futu_snapshot.py error"
+    fi
 else
-    warn "read_futu_snapshot.py not found"
+    fail "read_futu_snapshot.py not found"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────

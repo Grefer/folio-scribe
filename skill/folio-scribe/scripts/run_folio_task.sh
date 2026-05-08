@@ -14,13 +14,15 @@
 # Set FOLIO_SCRIBE_LANG=en for English prompts and note headings (default: zh).
 #
 # Flow:
-#   1. Skip weekends
+#   1. Skip sessions that do not map to an open market day
 #   2. Ensure Futu OpenD is running (auto-launch if needed)
 #   3. Invoke claude -p with /folio-scribe skill
 
 set -euo pipefail
 
 # ── Configuration (override via environment variables) ───────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
 OPEND_APP="${FOLIO_SCRIBE_OPEND_APP:-$HOME/Applications/Futu_OpenD/FutuOpenD.app}"
 OPEND_PORT="${FOLIO_SCRIBE_OPEND_PORT:-11111}"
@@ -30,6 +32,8 @@ LOG_DIR="$VAULT/.logs"
 MAX_OPEND_WAIT=90
 MAX_BUDGET="0.80"
 MAX_TURNS=20
+CLAUDE_PERMISSION_MODE="${FOLIO_SCRIBE_CLAUDE_PERMISSION_MODE:-acceptEdits}"
+ALLOWED_TOOLS="${FOLIO_SCRIBE_ALLOWED_TOOLS:-Read,Write,Bash(python3 *read_futu_snapshot.py*),Bash(python3 *write_daily_note.py*)}"
 
 # ── Language-dependent section names and flags ──────────────────────
 case "$LANG_PREF" in
@@ -45,14 +49,17 @@ case "$LANG_PREF" in
         ;;
 esac
 
-# ── Auto-detect task type from current hour ──────────────────────────
+# ── Auto-detect task type from current time ──────────────────────────
 detect_task_type() {
-    local hour
-    hour=$(date +%H | sed 's/^0//')   # 09 → 9, 00 → 0
-    if   [ "$hour" -ge 5  ] && [ "$hour" -lt 9  ]; then echo "us_review"
-    elif [ "$hour" -ge 9  ] && [ "$hour" -lt 13 ]; then echo "hk_plan"
-    elif [ "$hour" -ge 13 ] && [ "$hour" -lt 20 ]; then echo "hk_review"
-    else                                                  echo "us_plan"   # 20-23, 0-4
+    local hour minute total
+    hour=$((10#$(date +%H)))
+    minute=$((10#$(date +%M)))
+    total=$((hour * 60 + minute))
+
+    if   [ "$total" -ge 300  ] && [ "$total" -lt 510  ]; then echo "us_review" # 05:00-08:29
+    elif [ "$total" -ge 510  ] && [ "$total" -lt 780  ]; then echo "hk_plan"   # 08:30-12:59
+    elif [ "$total" -ge 780  ] && [ "$total" -lt 1200 ]; then echo "hk_review" # 13:00-19:59
+    else                                                       echo "us_plan"   # 20:00-04:59
     fi
 }
 
@@ -77,12 +84,24 @@ echo "================================================================"
 echo "  $(date '+%Y-%m-%d %H:%M:%S') | folio-scribe | $TASK_TYPE"
 echo "================================================================"
 
-# ── Weekend guard ────────────────────────────────────────────────────
+# ── Session-aware weekend guard ──────────────────────────────────────
 DOW=$(date +%u)   # 1=Mon … 7=Sun
-if [ "$DOW" -gt 5 ]; then
-    echo "Weekend (day $DOW), skipping."
-    exit 0
-fi
+case "$TASK_TYPE" in
+    us_review)
+        # In Asia time zones, the US Friday close review runs on local Saturday
+        # morning. Local Monday morning maps to a Sunday US session, so skip it.
+        if [ "$DOW" -eq 7 ] || [ "$DOW" -eq 1 ]; then
+            echo "No completed US regular session for local day $DOW, skipping."
+            exit 0
+        fi
+        ;;
+    *)
+        if [ "$DOW" -gt 5 ]; then
+            echo "Weekend (day $DOW), skipping."
+            exit 0
+        fi
+        ;;
+esac
 
 # ── Ensure Futu OpenD is running ─────────────────────────────────────
 ensure_opend() {
@@ -124,6 +143,19 @@ case "$TASK_TYPE" in
 esac
 echo "Note date: $NOTE_DATE"
 
+case "$TASK_TYPE" in
+    hk_plan)   NOTE_SECTION="$SEC_HK_PLAN" ;;
+    hk_review) NOTE_SECTION="$SEC_HK_REVIEW" ;;
+    us_plan)   NOTE_SECTION="$SEC_US_PLAN" ;;
+    us_review) NOTE_SECTION="$SEC_US_REVIEW" ;;
+esac
+
+SNAPSHOT_CMD="python3 \"$SCRIPT_DIR/read_futu_snapshot.py\""
+WRITER_CMD="python3 \"$SCRIPT_DIR/write_daily_note.py\" --vault \"$VAULT\" --date \"$NOTE_DATE\" --section \"$NOTE_SECTION\""
+if [ -n "$CHINESE_FLAG" ]; then
+    WRITER_CMD="$WRITER_CMD $CHINESE_FLAG"
+fi
+
 # ── Common prompt suffix ─────────────────────────────────────────────
 if [ "$LANG_PREF" = "en" ]; then
     PROMPT_SUFFIX="Additional requirement: after writing, update the frontmatter model field to your current model name (e.g. claude-opus-4-0-20250514). If the frontmatter contains total_assets, daily_pnl, leverage, or any per-position quantity fields (e.g. xiaomi_shares, qs_shares), remove them. Keep only date, type, tags, model, plan_score, discipline_score."
@@ -149,10 +181,10 @@ _build_prompt_zh() {
 /folio-scribe 定时任务：生成港股交易计划。
 
 执行步骤：
-1. 用 Futu OpenD snapshot 读取当前持仓和行情（先不带 symbols 跑一次拿到持仓列表，再带 symbols 跑一次拿完整行情）
+1. 用 Futu OpenD snapshot 读取当前持仓和行情（先不带 symbols 跑一次拿到持仓列表，再带 symbols 跑一次拿完整行情）。命令入口：${SNAPSHOT_CMD}
 2. 读取今天已有的 Daily 笔记（如果有的话）
 3. 生成 ${NOTE_DATE} 的港股交易计划，中文输出
-4. 用 write_daily_note.py 写入 vault，section 用「${SEC_HK_PLAN}」，加 --chinese 参数
+4. 将正文写入临时 Markdown 文件，然后运行：${WRITER_CMD} --content <临时文件>
 
 要求：内容遵循 SKILL.md 的 Trading Plan Requirements，中文输出。
 EOF
@@ -163,10 +195,10 @@ EOF
 /folio-scribe 定时任务：生成港股交易总结。
 
 执行步骤：
-1. 用 Futu OpenD snapshot 读取当前持仓、成交和盈亏数据
+1. 用 Futu OpenD snapshot 读取当前持仓、成交和盈亏数据。命令入口：${SNAPSHOT_CMD}
 2. 读取今天的 Daily/${NOTE_DATE}.md，获取港股计划作为对比基准
 3. 生成 ${NOTE_DATE} 的港股交易总结，中文输出
-4. 用 write_daily_note.py 写入 vault，section 用「${SEC_HK_REVIEW}」，加 --chinese 参数
+4. 将正文写入临时 Markdown 文件，然后运行：${WRITER_CMD} --content <临时文件>
 
 要求：内容遵循 SKILL.md 的 Trading Review Requirements，逐条对照今天的计划评估执行纪律，中文输出。
 EOF
@@ -177,10 +209,10 @@ EOF
 /folio-scribe 定时任务：生成美股交易计划。
 
 执行步骤：
-1. 用 Futu OpenD snapshot 读取美股持仓和行情数据
+1. 用 Futu OpenD snapshot 读取美股持仓和行情数据。命令入口：${SNAPSHOT_CMD}
 2. 读取今天的 Daily/${NOTE_DATE}.md，参考港股部分的情绪和资金面
 3. 生成 ${NOTE_DATE} 的美股交易计划，中文输出
-4. 用 write_daily_note.py 写入 vault，section 用「${SEC_US_PLAN}」，加 --chinese 参数
+4. 将正文写入临时 Markdown 文件，然后运行：${WRITER_CMD} --content <临时文件>
 
 要求：注意美股交易时段从本地 21:30 到次日 04:00（夏令时）。内容遵循 SKILL.md 的 Trading Plan Requirements，中文输出。
 EOF
@@ -191,10 +223,10 @@ EOF
 /folio-scribe 定时任务：生成美股交易总结。
 
 执行步骤：
-1. 用 Futu OpenD snapshot 读取美股持仓、成交和盈亏数据
+1. 用 Futu OpenD snapshot 读取美股持仓、成交和盈亏数据。命令入口：${SNAPSHOT_CMD}
 2. 读取 Daily/${NOTE_DATE}.md（昨晚的美股计划所在笔记），获取美股计划作为对比基准
 3. 生成美股交易总结，写入 ${NOTE_DATE}.md（对应美股交易日期，不是今天本地日期），中文输出
-4. 用 write_daily_note.py 写入 vault，section 用「${SEC_US_REVIEW}」，加 --chinese 参数
+4. 将正文写入临时 Markdown 文件，然后运行：${WRITER_CMD} --content <临时文件>
 
 要求：内容遵循 SKILL.md 的 Trading Review Requirements，逐条对照昨晚的美股计划评估执行纪律，中文输出。
 EOF
@@ -212,10 +244,10 @@ _build_prompt_en() {
 /folio-scribe Scheduled task: generate HK trading plan.
 
 Steps:
-1. Read current positions and quotes via Futu OpenD snapshot (run once without symbols for positions, then with symbols for full quotes)
+1. Read current positions and quotes via Futu OpenD snapshot (run once without symbols for positions, then with symbols for full quotes). Command entry: ${SNAPSHOT_CMD}
 2. Read the current existing Daily note (if any)
 3. Generate the HK trading plan for ${NOTE_DATE}
-4. Write to vault using write_daily_note.py, section "${SEC_HK_PLAN}"
+4. Write the body to a temporary Markdown file, then run: ${WRITER_CMD} --content <temp-file>
 
 Requirements: follow SKILL.md Trading Plan Requirements. Output in English.
 EOF
@@ -226,10 +258,10 @@ EOF
 /folio-scribe Scheduled task: generate HK trading review.
 
 Steps:
-1. Read current positions, fills, and P/L via Futu OpenD snapshot
+1. Read current positions, fills, and P/L via Futu OpenD snapshot. Command entry: ${SNAPSHOT_CMD}
 2. Read the current Daily/${NOTE_DATE}.md and use the HK plan as the baseline
 3. Generate the HK trading review for ${NOTE_DATE}
-4. Write to vault using write_daily_note.py, section "${SEC_HK_REVIEW}"
+4. Write the body to a temporary Markdown file, then run: ${WRITER_CMD} --content <temp-file>
 
 Requirements: follow SKILL.md Trading Review Requirements. Compare each decision against the current plan. Output in English.
 EOF
@@ -240,10 +272,10 @@ EOF
 /folio-scribe Scheduled task: generate US trading plan.
 
 Steps:
-1. Read US positions and quotes via Futu OpenD snapshot
+1. Read US positions and quotes via Futu OpenD snapshot. Command entry: ${SNAPSHOT_CMD}
 2. Read the current Daily/${NOTE_DATE}.md for HK session context
 3. Generate the US trading plan for ${NOTE_DATE}
-4. Write to vault using write_daily_note.py, section "${SEC_US_PLAN}"
+4. Write the body to a temporary Markdown file, then run: ${WRITER_CMD} --content <temp-file>
 
 Requirements: note US session runs 21:30–04:00 local (daylight saving). Follow SKILL.md Trading Plan Requirements. Output in English.
 EOF
@@ -254,10 +286,10 @@ EOF
 /folio-scribe Scheduled task: generate US trading review.
 
 Steps:
-1. Read US positions, fills, and P/L via Futu OpenD snapshot
+1. Read US positions, fills, and P/L via Futu OpenD snapshot. Command entry: ${SNAPSHOT_CMD}
 2. Read Daily/${NOTE_DATE}.md (the previous evening US plan) as the baseline
 3. Generate US trading review, write to ${NOTE_DATE}.md (US session date, not the current local date)
-4. Write to vault using write_daily_note.py, section "${SEC_US_REVIEW}"
+4. Write the body to a temporary Markdown file, then run: ${WRITER_CMD} --content <temp-file>
 
 Requirements: follow SKILL.md Trading Review Requirements. Compare each decision against the previous evening US plan. Output in English.
 EOF
@@ -276,12 +308,14 @@ echo "---"
 echo "Calling Claude with /folio-scribe skill ..."
 
 "$CLAUDE" -p "$PROMPT" \
+    --add-dir "$VAULT" \
+    --add-dir "$SKILL_DIR" \
     --fallback-model sonnet \
     --max-turns "$MAX_TURNS" \
     --max-budget-usd "$MAX_BUDGET" \
     --no-session-persistence \
-    --dangerously-skip-permissions \
-    --allowed-tools "Bash Read Write Edit" \
+    --permission-mode "$CLAUDE_PERMISSION_MODE" \
+    --allowed-tools "$ALLOWED_TOOLS" \
     2>&1 || {
     echo "ERROR: Claude CLI failed (exit $?)."
     exit 1

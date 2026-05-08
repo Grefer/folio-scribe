@@ -90,6 +90,44 @@ class FutuAdapterTests(unittest.TestCase):
         self.assertEqual(fills[0].price, Decimal("287.51"))
         self.assertIsNotNone(fills[0].filled_at)
 
+    def test_zero_numeric_values_are_preserved(self) -> None:
+        account = account_from_rows(
+            [
+                {
+                    "total_assets": 0,
+                    "cash": 0,
+                    "power": 0,
+                    "today_pl_val": 0,
+                }
+            ]
+        )
+        positions = positions_from_rows(
+            [
+                {
+                    "code": "US.ZERO",
+                    "qty": 0,
+                    "cost_price": 0,
+                    "market_val": 0,
+                    "pl_val": 0,
+                    "realized_pl": 0,
+                }
+            ]
+        )
+        orders = orders_from_rows([{"code": "US.ZERO", "qty": 0, "price": 0}])
+        fills = fills_from_rows([{"code": "US.ZERO", "qty": 0, "price": 0}])
+
+        self.assertEqual(account.daily_pnl, Decimal("0"))
+        self.assertEqual(account.buying_power, Decimal("0"))
+        self.assertEqual(positions[0].quantity, Decimal("0"))
+        self.assertEqual(positions[0].cost, Decimal("0"))
+        self.assertEqual(positions[0].market_value, Decimal("0"))
+        self.assertEqual(positions[0].unrealized_pnl, Decimal("0"))
+        self.assertEqual(positions[0].realized_pnl, Decimal("0"))
+        self.assertEqual(orders[0].quantity, Decimal("0"))
+        self.assertEqual(orders[0].price, Decimal("0"))
+        self.assertEqual(fills[0].quantity, Decimal("0"))
+        self.assertEqual(fills[0].price, Decimal("0"))
+
 
 if __name__ == "__main__":
     unittest.main()

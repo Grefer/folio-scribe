@@ -48,14 +48,18 @@ Before relying on OpenD:
 - Confirm the intended market/account context when multiple accounts, currencies, or trading environments are visible.
 - Keep Futu-derived order entry, order modification, order cancellation, watchlist edits, and price-alert changes disabled unless the user separately and explicitly asks for that action.
 
-When the local `folio_scribe` Python package is available, use the read-only
-OpenD snapshot helper to gather structured data for any client that can run
-local commands:
+Use the bundled read-only OpenD snapshot helper to gather structured data for
+any client that can run local commands. The helper is self-contained in the
+skill bundle; it does not require installing the `folio_scribe` repository
+package, but Futu reads still require `futu-api` and a reachable OpenD session.
 
 ```bash
-python3 skill/folio-scribe/scripts/read_futu_snapshot.py US.AAPL --counts-only
-python3 -m folio_scribe.futu_snapshot US.AAPL HK.00700
+python3 scripts/read_futu_snapshot.py US.AAPL --counts-only
+python3 scripts/read_futu_snapshot.py US.AAPL HK.00700
 ```
+
+If the repository package is installed, `python3 -m folio_scribe.futu_snapshot`
+is also available and should behave the same as the bundled helper.
 
 Use `--counts-only` for connectivity checks. For actual plans or reviews, read
 the full JSON and summarize only the fields relevant to the user's requested
@@ -163,6 +167,7 @@ Keep the skill usable across Codex, Claude Code, Cursor, Cline/Roo, JetBrains as
 
 - Keep core behavior in this `SKILL.md`; put deterministic repeated work in bundled scripts.
 - Prefer relative paths inside the skill bundle such as `scripts/write_daily_note.py` and `references/obsidian-format.md`.
+- Bundled scripts must keep a self-contained fallback so copying only the skill folder remains functional.
 - Do not depend on a Codex-only connector when a local script, OpenD endpoint, exported file, or broker UI can provide the same data.
 - When a client cannot run bundled scripts, provide the command the user or client should run and continue from the resulting file/output.
 - If installing into another client, copy the whole `skill/folio-scribe/` folder when that client supports skill bundles. If it only supports global instructions, paste the essential `SKILL.md` content and keep script/reference paths documented separately.
