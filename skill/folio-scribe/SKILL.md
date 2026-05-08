@@ -138,7 +138,24 @@ python3 scripts/write_daily_note.py --vault /path/to/vault --date YYYY-MM-DD --s
 python3 scripts/write_daily_note.py --vault /path/to/vault --date YYYY-MM-DD --section us_review --content /tmp/us-review.md --chinese
 ```
 
-Read `references/obsidian-format.md` for the recommended note structure and frontmatter.
+### Frontmatter
+
+Every daily note must have exactly these YAML frontmatter fields:
+
+```yaml
+---
+date: YYYY-MM-DD
+type: trading-daily
+tags: [trading, broker-journal]
+model:              # set to the model name used (e.g. claude-opus-4-0-20250514)
+plan_score:         # 1-10, filled in by review
+discipline_score:   # 1-10, filled in by review
+---
+```
+
+After writing a plan or review, update the `model` field to the current model identifier. Do **not** add financial account fields such as `total_assets`, `daily_pnl`, `leverage`, or per-position quantity fields (e.g. `xiaomi_shares`) to frontmatter — those belong in the note body only.
+
+Read `references/obsidian-format.md` for the recommended note structure and section layout.
 
 ## Client Portability
 
