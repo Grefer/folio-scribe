@@ -51,6 +51,36 @@ tests/                     单元测试
 docs/                      项目背景和路线图
 ```
 
+### 在 Claude Code 中快速使用
+
+安装 skill（符号链接到本仓库）：
+
+```bash
+ln -s "$(pwd)/skill/folio-scribe" ~/.claude/skills/folio-scribe
+```
+
+之后在 Claude Code 交互会话中直接使用 `/folio-scribe`：
+
+```text
+/folio-scribe 生成今天的港股交易计划，写入 Obsidian vault
+```
+
+```text
+/folio-scribe 对照今天的计划做港股收盘总结
+```
+
+```text
+/folio-scribe 读取当前持仓，生成美股交易计划
+```
+
+也可以在脚本中非交互调用：
+
+```bash
+claude -p "/folio-scribe 生成今天的港股交易计划" \
+  --allowed-tools "Bash Read Write Edit" \
+  --dangerously-skip-permissions
+```
+
 ### 在 Codex 中快速使用
 
 把 `skill/folio-scribe/` 安装到 Codex skills 目录，或者在当前仓库中让
@@ -70,7 +100,9 @@ Codex 使用 `folio-scribe` skill。
 读取我当前的持仓和委托，然后为下一交易时段生成观察列表。不要下单。
 ```
 
-如果你的 AI 客户端支持 skill 文件夹，复制整个目录即可：
+### 在其他 AI 客户端中使用
+
+如果客户端支持 skill 文件夹（Cursor、Cline/Roo 等），复制整个目录即可：
 
 ```text
 skill/folio-scribe/
@@ -278,6 +310,25 @@ python3 -m pip install -e ".[futu]"
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
+### 环境变量
+
+定时任务脚本 `run_folio_task.sh` 通过环境变量配置，均有默认值：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault 路径 |
+| `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD 应用路径 |
+| `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD 端口 |
+| `FOLIO_SCRIBE_CLAUDE` | 自动检测 `claude` 命令路径 | Claude Code CLI 路径 |
+
+示例：如果 vault 在非默认位置，可以在 shell profile 中设置：
+
+```bash
+export FOLIO_SCRIBE_VAULT="$HOME/Documents/MyTradingVault"
+```
+
+或者通过 `install_schedule.sh` 的 `--vault` 参数在安装时指定。
+
 ### 安全边界
 
 - 默认只读。
@@ -352,6 +403,36 @@ tests/                     Unit tests
 docs/                      Project context and roadmap
 ```
 
+### Quick Start With Claude Code
+
+Install the skill (symlink to this repo):
+
+```bash
+ln -s "$(pwd)/skill/folio-scribe" ~/.claude/skills/folio-scribe
+```
+
+Then use `/folio-scribe` directly in a Claude Code session:
+
+```text
+/folio-scribe Create today's HK trading plan and write it to Obsidian
+```
+
+```text
+/folio-scribe Review today's HK session against the plan
+```
+
+```text
+/folio-scribe Read current positions and create a US trading plan
+```
+
+Non-interactive usage from scripts:
+
+```bash
+claude -p "/folio-scribe Create today's HK trading plan" \
+  --allowed-tools "Bash Read Write Edit" \
+  --dangerously-skip-permissions
+```
+
 ### Quick Start With Codex
 
 Install `skill/folio-scribe/` into your Codex skills directory, or keep this
@@ -372,7 +453,10 @@ Read my current positions and orders, then create a watchlist for the next
 session. Do not place any orders.
 ```
 
-If your AI client supports skill folders, copy the whole directory:
+### Other AI Clients
+
+If your client supports skill folders (Cursor, Cline/Roo, etc.), copy the
+whole directory:
 
 ```text
 skill/folio-scribe/
@@ -565,6 +649,26 @@ Run tests:
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
+
+### Environment Variables
+
+The runner script `run_folio_task.sh` is configured via environment variables,
+all with sensible defaults:
+
+| Variable | Default | Description |
+|---|---|---|
+| `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault path |
+| `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD app path |
+| `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD port |
+| `FOLIO_SCRIBE_CLAUDE` | auto-detected `claude` path | Claude Code CLI path |
+
+Example: if your vault is in a non-default location:
+
+```bash
+export FOLIO_SCRIBE_VAULT="$HOME/Documents/MyTradingVault"
+```
+
+Or use the `--vault` flag when installing scheduled tasks.
 
 ### Safety Boundaries
 
