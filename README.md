@@ -44,7 +44,6 @@ skill/folio-scribe/        AI skill bundle
     read_futu_snapshot.py  Futu OpenD 快照读取
     launchd/               macOS launchd plist 模板
   references/              需要时加载的参考文档
-  agents/openai.yaml       Codex 界面元数据
 
 src/folio_scribe/          可复用 Python 包
 tests/                     单元测试
@@ -491,7 +490,6 @@ skill/folio-scribe/        AI skill bundle
     read_futu_snapshot.py  Futu OpenD snapshot reader
     launchd/               macOS launchd plist templates
   references/              Optional references loaded when needed
-  agents/openai.yaml       Codex UI metadata
 
 src/folio_scribe/          Reusable Python package
 tests/                     Unit tests
