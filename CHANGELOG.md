@@ -4,8 +4,25 @@ All notable changes to folio-scribe are documented here.
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.1.3] – 2026-05-08
+
 ### Added
+- Standalone skill bundle support: bundled helper scripts can run after copying `skill/folio-scribe/` without installing the repository package.
+- `agents/openai.yaml` skill UI metadata.
+- `tests/test_skill_bundle.py` portability checks for copied bundles.
 - `FOLIO_SCRIBE_LANG` env var for English prompts and note headings (`en`/`zh`).
+
+### Fixed
+- launchd templates now pass explicit task types, preventing scheduled jobs from being misclassified by time auto-detection.
+- Session-aware skip logic allows US Friday reviews on local Saturday morning and skips local Monday US reviews.
+- Futu row normalization now preserves legitimate numeric zero values.
+
+### Changed
+- Scheduled Claude runner no longer enables `--dangerously-skip-permissions` by default and uses a narrower tool allowlist.
+- Setup checks treat the repository Python package as optional for skill-bundle use.
+- Python package metadata now uses SPDX license syntax.
 
 ## [0.1.2] – 2026-05-08
 
