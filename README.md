@@ -7,12 +7,12 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.3-blue.svg)](CHANGELOG.md)
-[![Skill](https://img.shields.io/badge/AI%20Skill-Claude%20%7C%20Codex%20%7C%20Cursor-blueviolet)](#-quick-start)
+[![Skill](https://img.shields.io/badge/AI%20Skill-Claude%20%7C%20Codex%20%7C%20Cursor-blueviolet)](#quick-start)
 
 *A read-only AI skill that turns live broker data into structured trading plans,
 post-session reviews, and Obsidian/Markdown journals — without ever placing an order.*
 
-[中文](#-中文说明) · [English](#-what-it-does) · [Quick Start](#-quick-start) · [Example Output](#-example-output)
+[中文](#中文说明) · [English](#what-it-does) · [Quick Start](#quick-start) · [Example Output](#example-output)
 
 </div>
 
