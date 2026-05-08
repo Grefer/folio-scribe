@@ -258,6 +258,101 @@ cat ~/Documents/Trading/.logs/launchd-hk-plan.err
 - Futu OpenD 会在脚本运行时自动启动，但需要已登录（首次需手动登录一次）。
 - 默认使用 Claude Code 全局配置的模型（`~/.claude/settings.json` 中的 `model`），Opus 过载时自动降级到 Sonnet。
 
+### 生成效果示例
+
+以下是一篇由 Folio Scribe 自动生成的每日交易日志（虚拟数据）。完整示例见 [`docs/example-daily-note.md`](docs/example-daily-note.md)。
+
+<details>
+<summary><b>港股交易计划（08:45 自动生成）</b></summary>
+
+```markdown
+## 08:45 港股交易计划
+
+数据源：Futu OpenD 实时快照 | 生成时间：2026-01-15 08:45 HKT
+
+### 账户快照与风险敞口
+
+| 项目 | 数值 | 备注 |
+|------|------|------|
+| 总资产 | USD 25,380.50 | 较昨收 +1.2% |
+| 现金余额 | USD 8,125.30 | 充足 |
+| 港股集中度 | ~62% | 分散合理 |
+
+### 当前持仓
+
+| 标的 | 名称 | 数量 | 成本 | 现价 | 浮动盈亏 |
+|------|------|------|------|------|----------|
+| HK.00700 | 腾讯控股 | 200 股 | HK$368.50 | HK$392.40 | +HK$4,780 (+6.5%) |
+| HK.09888 | 百度集团-W | 500 股 | HK$102.30 | HK$108.60 | +HK$3,150 (+6.2%) |
+| US.NVDA | NVIDIA | 15 股 | USD 142.80 | USD 148.50 | +USD 85.50 (+4.0%) |
+
+### 港股操作计划 — 腾讯（HK.00700）
+
+| 情景 | 触发条件 | 操作 | 备注 |
+|------|----------|------|------|
+| 多头确认 | 站稳 $395 上方 ≥15 分钟 | 持仓不动，上看 $400 | 不追高 |
+| 箱体震荡 | $388 – $395 间反复 | 按兵不动 | |
+| 跌破支撑 | 跌破 $385 | 减仓 100 股 | 保护利润 |
+
+### 风险边界与今日红线
+
+1. **不加仓腾讯**：集中度已达 62%
+2. **不新开港股仓位**
+3. **不在开盘 15 分钟内交易**
+4. **不使用市价单**
+5. **最大新增敞口：0**；**最大减仓：腾讯 100 股 + 百度 200 股**
+```
+
+</details>
+
+<details>
+<summary><b>港股交易总结（16:15 自动生成）</b></summary>
+
+```markdown
+## 16:15 港股交易总结
+
+收盘时间：2026-01-15 16:00 HKT
+
+### 账户变动
+
+| 项目 | 开盘 | 收盘 | 变动 |
+|------|------|------|------|
+| 总资产 | USD 25,380.50 | USD 25,612.80 | +USD 232.30 (+0.92%) |
+
+### 计划执行评估
+
+| 计划项 | 执行情况 | 评分 |
+|--------|----------|------|
+| 不加仓腾讯 | ✅ 严格执行 | 10/10 |
+| 不在开盘15分钟内交易 | ✅ 执行 | 10/10 |
+| 跌破 $385 减仓 | 未触发 | — |
+
+**纪律评分：9/10** — 全程按计划执行，未做冲动交易。
+
+### 改进建议
+
+- 腾讯突破 $395 后未及时设置移动止盈，下次应提前规划
+- 百度走势平淡，考虑是否继续持有
+```
+
+</details>
+
+<details>
+<summary><b>Obsidian frontmatter（自动填充）</b></summary>
+
+```yaml
+---
+date: 2026-01-15
+type: trading-daily
+tags: [trading, broker-journal]
+model: claude-opus-4-0-20250514
+plan_score: 8
+discipline_score: 9
+---
+```
+
+</details>
+
 ### 示例工作流
 
 1. 先让 Codex 读取当前券商数据。
@@ -596,6 +691,101 @@ cat ~/Documents/Trading/.logs/folio-$(date +%Y%m%d)-hk_plan.log
 - Futu OpenD is auto-launched but must have been logged in at least once.
 - Uses the model from Claude Code global settings (`~/.claude/settings.json`),
   with automatic Sonnet fallback when the primary model is overloaded.
+
+### Example Output
+
+Below is an auto-generated daily trading journal (with dummy data). See the full example at [`docs/example-daily-note.md`](docs/example-daily-note.md).
+
+<details>
+<summary><b>HK Trading Plan (auto-generated at 08:45)</b></summary>
+
+```markdown
+## 08:45 HK Trading Plan
+
+Data source: Futu OpenD live snapshot | Generated: 2026-01-15 08:45 HKT
+
+### Account Snapshot
+
+| Item | Value | Note |
+|------|-------|------|
+| Total Assets | USD 25,380.50 | +1.2% vs prev close |
+| Cash Balance | USD 8,125.30 | Sufficient |
+| HK Concentration | ~62% | Well diversified |
+
+### Current Positions
+
+| Ticker | Name | Qty | Cost | Price | Unrealized P&L |
+|--------|------|-----|------|-------|-----------------|
+| HK.00700 | Tencent | 200 | HK$368.50 | HK$392.40 | +HK$4,780 (+6.5%) |
+| HK.09888 | Baidu | 500 | HK$102.30 | HK$108.60 | +HK$3,150 (+6.2%) |
+| US.NVDA | NVIDIA | 15 | USD 142.80 | USD 148.50 | +USD 85.50 (+4.0%) |
+
+### Scenario Plan — Tencent (HK.00700)
+
+| Scenario | Trigger | Action | Note |
+|----------|---------|--------|------|
+| Bullish confirmed | Holds above $395 for ≥15 min | Hold, target $400 | No chasing |
+| Range-bound | Oscillates $388–$395 | No action | |
+| Support break | Breaks below $385 | Trim 100 shares | Protect profits |
+
+### Risk Boundaries
+
+1. **No adding to Tencent** — concentration already at 62%
+2. **No new HK positions**
+3. **No trading in the first 15 minutes**
+4. **No market orders**
+5. **Max new exposure: 0; Max trim: Tencent 100 + Baidu 200**
+```
+
+</details>
+
+<details>
+<summary><b>HK Trading Review (auto-generated at 16:15)</b></summary>
+
+```markdown
+## 16:15 HK Trading Review
+
+Close time: 2026-01-15 16:00 HKT
+
+### Account Changes
+
+| Item | Open | Close | Change |
+|------|------|-------|--------|
+| Total Assets | USD 25,380.50 | USD 25,612.80 | +USD 232.30 (+0.92%) |
+
+### Plan Execution
+
+| Plan Item | Execution | Score |
+|-----------|-----------|-------|
+| No adding to Tencent | ✅ Strictly followed | 10/10 |
+| No trading in first 15 min | ✅ Followed | 10/10 |
+| Trim below $385 | Not triggered | — |
+
+**Discipline score: 9/10** — Followed the plan throughout. No impulsive trades.
+
+### Improvements
+
+- Did not set trailing stop after Tencent broke $395; plan ahead next time
+- Baidu lacked momentum; consider whether to keep holding
+```
+
+</details>
+
+<details>
+<summary><b>Obsidian frontmatter (auto-populated)</b></summary>
+
+```yaml
+---
+date: 2026-01-15
+type: trading-daily
+tags: [trading, broker-journal]
+model: claude-opus-4-0-20250514
+plan_score: 8
+discipline_score: 9
+---
+```
+
+</details>
 
 ### Example Workflow
 
