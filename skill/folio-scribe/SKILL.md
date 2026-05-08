@@ -85,9 +85,9 @@ Always identify which market session the output belongs to before writing a plan
 Common Asia/Hong Kong examples:
 
 ```text
-HK market plan: local 09:45, same local trading date
-HK market review: local 16:45, same local trading date
-US market plan during daylight saving time: local 21:45, same US session date
+HK market plan: local 08:45, same local trading date
+HK market review: local 16:15, same local trading date
+US market plan during daylight saving time: local 20:45, same US session date
 US market review during daylight saving time: local 06:45 next morning, write back to prior US session date
 ```
 

@@ -37,7 +37,12 @@ Obsidian/Markdown 交易日志。
 ```text
 skill/folio-scribe/        AI skill bundle
   SKILL.md                 兼容客户端加载的核心指令
-  scripts/                 辅助脚本，例如 Obsidian 笔记同步
+  scripts/
+    run_folio_task.sh      定时任务 / 手动执行入口
+    install_schedule.sh    安装 / 卸载 / 查看 macOS 定时任务
+    write_daily_note.py    Obsidian 笔记 section 写入
+    read_futu_snapshot.py  Futu OpenD 快照读取
+    launchd/               macOS launchd plist 模板
   references/              需要时加载的参考文档
   agents/openai.yaml       Codex 界面元数据
 
@@ -146,6 +151,81 @@ Daily/YYYY-MM-DD.md
 默认会把复盘写回美股交易所对应的交易日期，而不是本地日期，除非你明确要求按本地
 日期记录。
 
+### 定时任务
+
+Folio Scribe 支持通过 macOS launchd 定时生成交易日志。脚本会自动启动 Futu
+OpenD（如果未运行）、调用 Claude Code 的 `/folio-scribe` skill 生成内容、
+写入 Obsidian vault。
+
+**安装定时任务：**
+
+```bash
+# 首次安装（默认 vault 路径 ~/Documents/Trading）
+skill/folio-scribe/scripts/install_schedule.sh install
+
+# 指定自定义 vault 路径
+skill/folio-scribe/scripts/install_schedule.sh install --vault ~/Documents/MyVault
+```
+
+安装后，4 个任务会在每个工作日自动运行：
+
+| 时间 (HKT) | 任务 | 说明 |
+|---|---|---|
+| 06:45 | 美股交易总结 | 写入前一交易日笔记 |
+| 08:45 | 港股交易计划 | 开盘前 |
+| 16:15 | 港股交易总结 | 收盘后 |
+| 20:45 | 美股交易计划 | 美股开盘前 |
+
+**手动运行：**
+
+```bash
+# 自动判断（按当前时间决定生成哪个 section）
+skill/folio-scribe/scripts/run_folio_task.sh
+
+# 指定任务类型
+skill/folio-scribe/scripts/run_folio_task.sh hk_plan
+skill/folio-scribe/scripts/run_folio_task.sh hk_review
+skill/folio-scribe/scripts/run_folio_task.sh us_plan
+skill/folio-scribe/scripts/run_folio_task.sh us_review
+```
+
+自动判断规则：
+
+| 时间段 | 任务 |
+|---|---|
+| 05:00–08:29 | `us_review` |
+| 08:30–12:59 | `hk_plan` |
+| 13:00–19:59 | `hk_review` |
+| 20:00–04:59 | `us_plan` |
+
+**管理定时任务：**
+
+```bash
+# 查看状态
+skill/folio-scribe/scripts/install_schedule.sh status
+
+# 卸载所有定时任务
+skill/folio-scribe/scripts/install_schedule.sh uninstall
+```
+
+**查看日志：**
+
+```bash
+# 今天某个任务的运行日志
+cat ~/Documents/Trading/.logs/folio-$(date +%Y%m%d)-hk_plan.log
+
+# launchd 输出（排查启动问题）
+cat ~/Documents/Trading/.logs/launchd-hk-plan.out
+cat ~/Documents/Trading/.logs/launchd-hk-plan.err
+```
+
+**注意事项：**
+
+- 电脑需处于开机且未休眠状态，否则会错过触发时间。
+- 周末自动跳过（脚本内置检查）。
+- Futu OpenD 会在脚本运行时自动启动，但需要已登录（首次需手动登录一次）。
+- 默认使用 Claude Code 全局配置的模型（`~/.claude/settings.json` 中的 `model`），Opus 过载时自动降级到 Sonnet。
+
 ### 示例工作流
 
 1. 先让 Codex 读取当前券商数据。
@@ -164,6 +244,19 @@ Daily/YYYY-MM-DD.md
    ```
 
 5. 保留每日记录，之后可用于周复盘和月复盘。
+
+### 新机器部署
+
+```bash
+# 1. 安装 Python 包
+python3 -m pip install -e ".[futu]"
+
+# 2. 安装 Claude Code skill（符号链接）
+ln -s "$(pwd)/skill/folio-scribe" ~/.claude/skills/folio-scribe
+
+# 3. 安装定时任务
+skill/folio-scribe/scripts/install_schedule.sh install
+```
 
 ### Python 开发
 
@@ -245,7 +338,12 @@ not financial advice.
 ```text
 skill/folio-scribe/        AI skill bundle
   SKILL.md                 Core instructions loaded by compatible clients
-  scripts/                 Helper scripts, including Obsidian note sync
+  scripts/
+    run_folio_task.sh      Scheduled / manual task runner
+    install_schedule.sh    Install / uninstall / status for macOS launchd
+    write_daily_note.py    Obsidian note section writer
+    read_futu_snapshot.py  Futu OpenD snapshot reader
+    launchd/               macOS launchd plist templates
   references/              Optional references loaded when needed
   agents/openai.yaml       Codex UI metadata
 
@@ -356,6 +454,65 @@ For US markets viewed from Asia time zones, the post-close review often happens
 the next local morning. Folio Scribe normally writes that review back to the US
 exchange session date unless you explicitly ask for local-date journaling.
 
+### Scheduled Tasks
+
+Folio Scribe supports automated journal generation via macOS launchd. The runner
+script auto-launches Futu OpenD if needed, invokes the `/folio-scribe` skill
+through Claude Code, and writes the output to the Obsidian vault.
+
+**Install scheduled tasks:**
+
+```bash
+# Install with default vault (~/Documents/Trading)
+skill/folio-scribe/scripts/install_schedule.sh install
+
+# Custom vault path
+skill/folio-scribe/scripts/install_schedule.sh install --vault ~/Documents/MyVault
+```
+
+Once installed, 4 tasks run automatically on weekdays:
+
+| Time (HKT) | Task | Description |
+|---|---|---|
+| 06:45 | US Trading Review | Writes to the previous session's note |
+| 08:45 | HK Trading Plan | Before HK market open |
+| 16:15 | HK Trading Review | After HK market close |
+| 20:45 | US Trading Plan | Before US market open |
+
+**Manual run:**
+
+```bash
+# Auto-detect task type from current time
+skill/folio-scribe/scripts/run_folio_task.sh
+
+# Specify task type
+skill/folio-scribe/scripts/run_folio_task.sh hk_plan
+skill/folio-scribe/scripts/run_folio_task.sh hk_review
+skill/folio-scribe/scripts/run_folio_task.sh us_plan
+skill/folio-scribe/scripts/run_folio_task.sh us_review
+```
+
+**Manage scheduled tasks:**
+
+```bash
+skill/folio-scribe/scripts/install_schedule.sh status     # check status
+skill/folio-scribe/scripts/install_schedule.sh uninstall   # remove all tasks
+```
+
+**View logs:**
+
+```bash
+cat ~/Documents/Trading/.logs/folio-$(date +%Y%m%d)-hk_plan.log
+```
+
+**Notes:**
+
+- The Mac must be awake (not sleeping) at trigger time.
+- Weekends are automatically skipped.
+- Futu OpenD is auto-launched but must have been logged in at least once.
+- Uses the model from Claude Code global settings (`~/.claude/settings.json`),
+  with automatic Sonnet fallback when the primary model is overloaded.
+
 ### Example Workflow
 
 1. Start by asking Codex to read current broker data.
@@ -375,6 +532,19 @@ exchange session date unless you explicitly ask for local-date journaling.
    ```
 
 5. Keep the daily record for weekly and monthly reviews.
+
+### Setup on a New Machine
+
+```bash
+# 1. Install Python package
+python3 -m pip install -e ".[futu]"
+
+# 2. Install Claude Code skill (symlink)
+ln -s "$(pwd)/skill/folio-scribe" ~/.claude/skills/folio-scribe
+
+# 3. Install scheduled tasks
+skill/folio-scribe/scripts/install_schedule.sh install
+```
 
 ### Python Development
 

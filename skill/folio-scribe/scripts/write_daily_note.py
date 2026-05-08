@@ -9,17 +9,17 @@ from pathlib import Path
 
 
 SECTION_MARKERS = {
-    "plan": ("## 09:45 Trading Plan", "## 16:45 Trading Review"),
-    "review": ("## 16:45 Trading Review", None),
-    "hk_plan": ("## 09:45 HK Trading Plan", "## 16:45 HK Trading Review"),
-    "hk_review": ("## 16:45 HK Trading Review", "## 21:45 US Trading Plan"),
-    "us_plan": ("## 21:45 US Trading Plan", "## 06:45 US Trading Review"),
+    "plan": ("## 08:45 Trading Plan", "## 16:15 Trading Review"),
+    "review": ("## 16:15 Trading Review", None),
+    "hk_plan": ("## 08:45 HK Trading Plan", "## 16:15 HK Trading Review"),
+    "hk_review": ("## 16:15 HK Trading Review", "## 20:45 US Trading Plan"),
+    "us_plan": ("## 20:45 US Trading Plan", "## 06:45 US Trading Review"),
     "us_review": ("## 06:45 US Trading Review", None),
-    "计划": ("## 09:45 交易计划", "## 16:45 交易总结"),
-    "总结": ("## 16:45 交易总结", None),
-    "港股计划": ("## 09:45 港股交易计划", "## 16:45 港股交易总结"),
-    "港股总结": ("## 16:45 港股交易总结", "## 21:45 美股交易计划"),
-    "美股计划": ("## 21:45 美股交易计划", "## 06:45 美股交易总结"),
+    "计划": ("## 08:45 交易计划", "## 16:15 交易总结"),
+    "总结": ("## 16:15 交易总结", None),
+    "港股计划": ("## 08:45 港股交易计划", "## 16:15 港股交易总结"),
+    "港股总结": ("## 16:15 港股交易总结", "## 20:45 美股交易计划"),
+    "美股计划": ("## 20:45 美股交易计划", "## 06:45 美股交易总结"),
     "美股总结": ("## 06:45 美股交易总结", None),
 }
 
@@ -27,16 +27,16 @@ SECTION_MARKERS = {
 def default_note(date: str, chinese: bool) -> str:
     if chinese:
         title = f"# {date} 交易日志"
-        plan = "## 09:45 港股交易计划"
-        review = "## 16:45 港股交易总结"
-        us_plan = "## 21:45 美股交易计划"
+        plan = "## 08:45 港股交易计划"
+        review = "## 16:15 港股交易总结"
+        us_plan = "## 20:45 美股交易计划"
         us_review = "## 06:45 美股交易总结"
         tags = "[trading, broker-journal]"
     else:
         title = f"# {date} Trading Journal"
-        plan = "## 09:45 HK Trading Plan"
-        review = "## 16:45 HK Trading Review"
-        us_plan = "## 21:45 US Trading Plan"
+        plan = "## 08:45 HK Trading Plan"
+        review = "## 16:15 HK Trading Review"
+        us_plan = "## 20:45 US Trading Plan"
         us_review = "## 06:45 US Trading Review"
         tags = "[trading, broker-journal]"
     return (
@@ -44,9 +44,7 @@ def default_note(date: str, chinese: bool) -> str:
         f"date: {date}\n"
         "type: trading-daily\n"
         f"tags: {tags}\n"
-        "total_assets:\n"
-        "daily_pnl:\n"
-        "leverage:\n"
+        "model:\n"
         "plan_score:\n"
         "discipline_score:\n"
         "---\n\n"

@@ -13,9 +13,7 @@ Recommended frontmatter:
 date: YYYY-MM-DD
 type: trading-daily
 tags: [trading, broker-journal]
-total_assets:
-daily_pnl:
-leverage:
+model:
 plan_score:
 discipline_score:
 ---
@@ -26,7 +24,7 @@ Recommended body:
 ```markdown
 # YYYY-MM-DD Trading Journal
 
-## 09:45 HK Trading Plan
+## 08:45 HK Trading Plan
 
 ### Account Snapshot
 
@@ -44,7 +42,7 @@ Recommended body:
 
 ---
 
-## 16:45 HK Trading Review
+## 16:15 HK Trading Review
 
 ### Account Changes
 
@@ -62,7 +60,7 @@ Recommended body:
 
 ---
 
-## 21:45 US Trading Plan
+## 20:45 US Trading Plan
 
 ### US Account and Exposure
 
