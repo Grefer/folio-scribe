@@ -456,11 +456,193 @@ ln -s "$(pwd)/skill/folio-scribe" ~/.claude/skills/folio-scribe
 /folio-scribe 读取当前持仓，生成美股交易计划
 ```
 
+<details>
+<summary>非交互 / 脚本调用</summary>
+
+```bash
+claude -p "/folio-scribe 生成今天的港股交易计划" \
+  --permission-mode acceptEdits \
+  --allowed-tools "Read,Write,Bash(python3 *read_futu_snapshot.py*),Bash(python3 *write_daily_note.py*)"
+```
+
+</details>
+
 **Codex：**
 
 ```
 使用 Folio Scribe 根据我的券商数据生成今天的港股交易计划。
 使用 Folio Scribe 复盘今晚的美股交易，并更新我的 Obsidian 交易日志。
+```
+
+**其他 AI 客户端：**
+
+| 客户端 | 方式 |
+|:--|:--|
+| **Cursor / Cline / Roo** | 复制 `skill/folio-scribe/` 文件夹到客户端的 skill 目录 |
+| **JetBrains AI** | 将 `SKILL.md` 内容粘贴到全局自定义指令 |
+| **其他** | `SKILL.md` 作为指令 + `scripts/` 和 `references/` 作为外部资源 |
+
+### 目录结构
+
+```
+folio-scribe/
+├── skill/folio-scribe/           ← AI skill 包（复制即用）
+│   ├── SKILL.md                     各客户端加载的核心指令
+│   ├── scripts/
+│   │   ├── run_folio_task.sh        定时 / 手动执行入口
+│   │   ├── install_schedule.sh      macOS launchd 安装器
+│   │   ├── check_setup.sh           环境健康检查
+│   │   ├── write_daily_note.py      Obsidian 笔记 section 写入
+│   │   ├── read_futu_snapshot.py    Futu OpenD 快照读取
+│   │   └── launchd/                 Plist 模板
+│   └── references/                  按需加载的参考文档
+│
+├── src/folio_scribe/             ← 可复用 Python 包
+│   ├── models.py                    BrokerSnapshot 数据类
+│   ├── data_sources/                券商适配器（Futu 等）
+│   ├── journal/                     Obsidian 写入模块
+│   └── futu_snapshot.py             CLI 入口
+│
+├── tests/                        ← 单元测试
+├── docs/                         ← 项目背景与路线图
+└── pyproject.toml
+```
+
+> [!TIP]
+> `skill/folio-scribe/` 是**自包含**的——直接复制即可使用，无需安装 Python 包。券商读取仅需 `futu-api`。
+
+### 数据来源
+
+Folio Scribe 优先使用**实时、结构化的券商数据**，而非过期网页报价：
+
+| 优先级 | 来源 | 状态 |
+|:--:|:--|:--:|
+| 1️⃣ | 券商 API（Futu OpenD / OpenAPI） | ✅ Beta |
+| 2️⃣ | 券商桌面端可见数据 | ✅ |
+| 3️⃣ | 券商导出报表 | ✅ |
+| 4️⃣ | 截图 | ✅ |
+| 5️⃣ | 手动整理的持仓/委托快照 | ✅ |
+
+**Futu OpenD：** 确认 OpenD 已**安装、运行、登录**，且本地端口 `11111`（默认）可连接。
+
+```bash
+# 连通性检查
+python3 skill/folio-scribe/scripts/read_futu_snapshot.py US.AAPL --counts-only
+
+# 完整 JSON 快照
+python3 skill/folio-scribe/scripts/read_futu_snapshot.py US.AAPL HK.00700
+```
+
+<details>
+<summary>当前 Futu 适配器能力</summary>
+
+| 功能 | 状态 |
+|:--|:--:|
+| 账户摘要、持仓、委托、成交 | ✅ |
+| 报价快照 | ✅ |
+| 期权链、盘口、逐笔、K 线 | 🗓️ 路线图 |
+| 新闻、舆情、资金流异常 | 🗓️ 路线图 |
+
+</details>
+
+### Obsidian 同步
+
+**每日笔记结构：**
+
+```
+<vault>/Daily/YYYY-MM-DD.md
+├── 港股交易计划
+├── 港股交易总结
+├── 美股交易计划
+└── 美股交易总结
+```
+
+**写入 section：**
+
+```bash
+python3 skill/folio-scribe/scripts/write_daily_note.py \
+  --vault /path/to/your/vault \
+  --date 2026-05-07 \
+  --section hk_plan \
+  --content /tmp/plan.md \
+  --chinese
+```
+
+支持的 section 名：
+
+```
+plan, review, hk_plan, hk_review, us_plan, us_review
+计划, 总结, 港股计划, 港股总结, 美股计划, 美股总结
+```
+
+> [!NOTE]
+> 美股收盘复盘通常发生在本地第二天早上。Folio Scribe 默认写回**美股交易所对应的交易日期**，而非本地日期。
+
+### 示例输出
+
+以下是自动生成的每日交易日志（虚拟数据）。完整示例见 [`docs/example-daily-note.md`](docs/example-daily-note.md)。
+
+<details>
+<summary><b>🇭🇰 港股交易计划（08:45 自动生成）</b></summary>
+
+```markdown
+## 08:45 港股交易计划
+
+数据源：Futu OpenD 实时快照 | 生成时间：2026-01-15 08:45 HKT
+
+### 账户快照与风险敞口
+
+| 项目 | 数值 | 备注 |
+|------|------|------|
+| 总资产 | USD 25,380.50 | 较昨收 +1.2% |
+| 现金余额 | USD 8,125.30 | 充足 |
+| 港股集中度 | ~62% | 分散合理 |
+
+### 港股操作计划 — 腾讯（HK.00700）
+
+| 情景 | 触发条件 | 操作 | 备注 |
+|------|----------|------|------|
+| 多头确认 | 站稳 $395 上方 ≥15 分钟 | 持仓不动，上看 $400 | 不追高 |
+| 箱体震荡 | $388 – $395 间反复 | 按兵不动 | |
+| 跌破支撑 | 跌破 $385 | 减仓 100 股 | 保护利润 |
+
+### 风险边界与今日红线
+
+1. **不加仓腾讯**：集中度已达 62%
+2. **不新开港股仓位**
+3. **不在开盘 15 分钟内交易**
+4. **不使用市价单**
+```
+
+</details>
+
+<details>
+<summary><b>🇭🇰 港股交易总结（16:15 自动生成）</b></summary>
+
+```markdown
+## 16:15 港股交易总结
+
+### 计划执行评估
+
+| 计划项 | 执行情况 | 评分 |
+|--------|----------|------|
+| 不加仓腾讯 | ✅ 严格执行 | 10/10 |
+| 不在开盘15分钟内交易 | ✅ 执行 | 10/10 |
+| 跌破 $385 减仓 | 未触发 | — |
+
+**纪律评分：9/10** — 全程按计划执行，未做冲动交易。
+```
+
+</details>
+
+### 工作流示例
+
+```
+1. 📊 读取券商数据    →  AI 通过 Futu / 券商读取持仓、委托、报价
+2. 📝 生成交易计划    →  "为下一次美股交易时段生成计划，包含风险边界"
+3. 💹 手动交易        →  你在券商软件中自行执行
+4. 🔍 生成复盘        →  "对照美股交易计划做复盘"
+5. 📓 日志保存        →  每日笔记存入 Obsidian，可用于周/月复盘
 ```
 
 ### 新机器部署
@@ -479,6 +661,19 @@ skill/folio-scribe/scripts/install_schedule.sh install
 skill/folio-scribe/scripts/check_setup.sh
 ```
 
+### Python 开发
+
+```bash
+# 本地安装（可编辑模式）
+python3 -m pip install -e .
+
+# 安装 Futu 支持
+python3 -m pip install -e ".[futu]"
+
+# 运行测试
+PYTHONPATH=src python3 -m unittest discover -s tests
+```
+
 ### 定时任务
 
 | 时间 (HKT) | 任务 | 说明 |
@@ -487,6 +682,15 @@ skill/folio-scribe/scripts/check_setup.sh
 | `08:45` | 🇭🇰 港股交易计划 | 开盘前 |
 | `16:15` | 🇭🇰 港股交易总结 | 收盘后 |
 | `20:45` | 🇺🇸 美股交易计划 | 美股开盘前 |
+
+自动判断规则（无参数运行时）：
+
+| 本地时间 | 任务 |
+|:--|:--|
+| 05:00 – 08:29 | `us_review` |
+| 08:30 – 12:59 | `hk_plan` |
+| 13:00 – 19:59 | `hk_review` |
+| 20:00 – 04:59 | `us_plan` |
 
 <details>
 <summary>定时任务管理</summary>
@@ -507,15 +711,41 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 - 美股周五复盘可在本地周六早上运行
 - Futu OpenD 自动启动，但需已登录过一次
 - 使用 Claude Code 全局模型，Opus 过载时降级到 Sonnet
+- 使用限定工具 allowlist，**不**启用 `--dangerously-skip-permissions`
 
 </details>
 
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|:--|:--|:--|
+| `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault 路径 |
+| `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD 应用路径 |
+| `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD 端口 |
+| `FOLIO_SCRIBE_CLAUDE` | 自动检测 | Claude Code CLI 路径 |
+| `FOLIO_SCRIBE_CLAUDE_PERMISSION_MODE` | `acceptEdits` | Claude Code 权限模式 |
+| `FOLIO_SCRIBE_ALLOWED_TOOLS` | 限定 allowlist | Claude Code 工具白名单 |
+| `FOLIO_SCRIBE_LANG` | `zh` | 输出语言（`en` / `zh`） |
+
 ### 安全边界
 
-- 🔐 默认只读，不自动下单
-- 📊 实时券商数据优先于旧上下文
-- 🚫 不承诺收益，不提供金融建议
-- ⚠️ 杠杆和期权风险必须清楚说明
+| 原则 | 说明 |
+|:--|:--|
+| 🔐 只读 | 不自动下单、改单或撤单 |
+| 📊 数据优先 | 实时券商数据始终优先于旧上下文 |
+| 🚫 不承诺收益 | 所有输出均为决策辅助，非金融建议 |
+| ⚠️ 风险透明 | 杠杆和期权风险必须清楚说明 |
+| 🔏 隐私保护 | 个人账户数据不进入公开仓库 |
+
+### 文档
+
+| 文件 | 说明 |
+|:--|:--|
+| [`SKILL.md`](skill/folio-scribe/SKILL.md) | 核心 AI Skill 定义 |
+| [`docs/PROJECT_CONTEXT.md`](docs/PROJECT_CONTEXT.md) | 产品决策与设计原则 |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | 里程碑追踪 |
+| [`docs/example-daily-note.md`](docs/example-daily-note.md) | 完整示例输出 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本历史 |
 
 ---
 
