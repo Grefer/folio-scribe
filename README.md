@@ -1,4 +1,4 @@
-<![CDATA[<div align="center">
+<div align="center">
 
 # 📒 Folio Scribe
 
@@ -524,4 +524,3 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 **MIT License** · [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md)
 
 </div>
-]]>
