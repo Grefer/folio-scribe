@@ -43,6 +43,7 @@ def default_note(date: str, chinese: bool) -> str:
         f"date: {date}\n"
         "type: trading-daily\n"
         f"tags: {tags}\n"
+        "cssclasses: [trading-journal]\n"
         "model:\n"
         "plan_score:\n"
         "discipline_score:\n"

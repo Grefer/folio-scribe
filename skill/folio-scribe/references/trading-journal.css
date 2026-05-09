@@ -1,0 +1,448 @@
+/* ============================================================
+   Folio Scribe — Trading Journal Styles for Obsidian (v2)
+
+   Activate: Settings > Appearance > CSS snippets > trading-journal
+   Scope:    Notes with `cssclasses: trading-journal` in frontmatter
+
+   Designed for Obsidian dark theme. Rich dashboard-style layout
+   with purple plan sections and green review sections.
+
+   NOTE: In Obsidian Reading view, `cssclasses` and `.markdown-rendered`
+   are on the SAME element. So we use `.trading-journal h2` not
+   `.trading-journal .markdown-rendered h2`.
+   ============================================================ */
+
+/* ── Root variables ───────────────────────────────────────── */
+.trading-journal {
+  /* Plan (08:45 / 20:45) — Purple/Indigo */
+  --tj-plan: #a78bfa;
+  --tj-plan-dim: #7c3aed;
+  --tj-plan-bg: rgba(139, 92, 246, 0.14);
+  --tj-plan-bg-deep: rgba(139, 92, 246, 0.22);
+  --tj-plan-border: rgba(139, 92, 246, 0.45);
+
+  /* Review (16:15 / 06:45) — Emerald/Green */
+  --tj-review: #34d399;
+  --tj-review-dim: #059669;
+  --tj-review-bg: rgba(16, 185, 129, 0.14);
+  --tj-review-bg-deep: rgba(16, 185, 129, 0.22);
+  --tj-review-border: rgba(16, 185, 129, 0.45);
+
+  /* Danger — Red */
+  --tj-danger: #f87171;
+  --tj-danger-bg: rgba(248, 113, 113, 0.14);
+  --tj-danger-border: rgba(248, 113, 113, 0.4);
+
+  /* Warning — Amber */
+  --tj-warn: #fbbf24;
+  --tj-warn-bg: rgba(251, 191, 36, 0.14);
+  --tj-warn-border: rgba(251, 191, 36, 0.4);
+
+  /* Accent — Cyan */
+  --tj-accent: #38bdf8;
+  --tj-accent-bg: rgba(56, 189, 248, 0.12);
+  --tj-accent-border: rgba(56, 189, 248, 0.35);
+
+  /* Watch — Purple */
+  --tj-watch: #c084fc;
+  --tj-watch-bg: rgba(192, 132, 252, 0.12);
+  --tj-watch-border: rgba(192, 132, 252, 0.35);
+
+  /* Surfaces */
+  --tj-card: rgba(255, 255, 255, 0.03);
+  --tj-card-hover: rgba(255, 255, 255, 0.06);
+  --tj-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  --tj-shadow-sm: 0 1px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* ── H1: daily title ──────────────────────────────────────── */
+.trading-journal h1 {
+  font-size: 1.6em;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  border-bottom: 3px solid var(--tj-plan-border);
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+  background: linear-gradient(90deg, var(--tj-plan) 0%, var(--tj-accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── H2: session headers — dramatic gradient banners ──────── */
+.trading-journal h2 {
+  position: relative;
+  padding: 14px 20px;
+  border-radius: 10px;
+  margin-top: 40px;
+  margin-bottom: 20px;
+  font-size: 1.3em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: var(--tj-shadow);
+  /* Default: plan style (purple) */
+  background: linear-gradient(135deg, var(--tj-plan-bg-deep) 0%, var(--tj-plan-bg) 100%);
+  border-left: 5px solid var(--tj-plan);
+  color: var(--tj-plan);
+}
+
+/* H2 review headings (16:15 / 06:45) → green gradient
+   Structure: h2:1=plan, h2:2=review, h2:3=us-plan, h2:4=us-review */
+.trading-journal h2:nth-of-type(2),
+.trading-journal h2:nth-of-type(4) {
+  background: linear-gradient(135deg, var(--tj-review-bg-deep) 0%, var(--tj-review-bg) 100%);
+  border-left: 5px solid var(--tj-review);
+  color: var(--tj-review);
+}
+
+/* ── H3: subsection headings with accent bar ─────────────── */
+.trading-journal h3 {
+  font-size: 1.08em;
+  font-weight: 700;
+  margin-top: 28px;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--tj-card);
+  border-left: 3px solid var(--tj-plan);
+  color: #c4b5fd;
+}
+
+/* H4: stock-level sub headings */
+.trading-journal h4 {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--tj-plan);
+  margin-top: 20px;
+  padding-left: 4px;
+}
+
+/* ── Tables: rich header, alternating rows, hover ─────────── */
+.trading-journal table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.9em;
+  margin: 12px 0 20px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--tj-shadow-sm);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.trading-journal thead tr {
+  background: var(--tj-plan-bg-deep);
+}
+
+.trading-journal th {
+  font-weight: 700;
+  color: var(--tj-plan) !important;
+  font-size: 0.88em;
+  letter-spacing: 0.04em;
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--tj-plan-border);
+  text-align: left;
+}
+
+.trading-journal td {
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-normal);
+}
+
+.trading-journal tbody tr:nth-child(even) {
+  background: var(--tj-card);
+}
+
+.trading-journal tbody tr:hover {
+  background: var(--tj-card-hover);
+  transition: background 0.15s ease;
+}
+
+/* Last row: no bottom border */
+.trading-journal tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Horizontal rules: gradient dividers ─────────────────── */
+.trading-journal hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--tj-plan-border), transparent);
+  margin: 32px 0;
+}
+
+/* ── Inline bold: slight accent for prices / triggers ─────── */
+.trading-journal strong {
+  color: #e2e8f0;
+  font-weight: 700;
+}
+
+/* ── Metadata line (数据源 / 收盘时间) ────────────────────── */
+.trading-journal p > strong:first-child:last-child {
+  display: block;
+  font-size: 0.84em;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 12px;
+  padding: 6px 12px;
+  background: var(--tj-card);
+  border-radius: 6px;
+  border-left: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ── Bullet lists ─────────────────────────────────────────── */
+.trading-journal ul > li,
+.trading-journal ol > li {
+  margin-bottom: 4px;
+  line-height: 1.7;
+}
+
+.trading-journal ul > li::marker {
+  color: var(--tj-plan);
+}
+
+.trading-journal ol > li::marker {
+  color: var(--tj-danger);
+  font-weight: 700;
+}
+
+/* ============================================================
+   CALLOUTS — Rich card-style blocks
+   ============================================================ */
+
+/* Shared callout base: all callouts get card treatment */
+.trading-journal .callout {
+  border-radius: 10px !important;
+  padding: 6px 12px !important;
+  margin: 16px 0 !important;
+  box-shadow: var(--tj-shadow-sm) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.trading-journal .callout .callout-title {
+  font-weight: 700;
+  padding: 6px 4px;
+  font-size: 1.05em;
+}
+
+.trading-journal .callout .callout-content {
+  padding: 4px 4px 8px 4px;
+}
+
+/* Callout tables: tighter spacing */
+.trading-journal .callout table {
+  margin: 6px 0 8px 0;
+}
+
+/* ── [!红线 / redline] Risk boundaries ────────────────────── */
+.trading-journal .callout[data-callout="redline"],
+.trading-journal .callout[data-callout="红线"] {
+  --callout-color: 248, 113, 113;
+  --callout-icon: lucide-shield-alert;
+  background: linear-gradient(135deg, var(--tj-danger-bg) 0%, rgba(248, 113, 113, 0.06) 100%) !important;
+  border: 1px solid var(--tj-danger-border) !important;
+  border-left: 5px solid var(--tj-danger) !important;
+}
+
+.trading-journal .callout[data-callout="redline"] .callout-title,
+.trading-journal .callout[data-callout="红线"] .callout-title {
+  color: var(--tj-danger) !important;
+  font-size: 1.1em;
+}
+
+/* Bold items inside red-line get red text */
+.trading-journal .callout[data-callout="redline"] strong,
+.trading-journal .callout[data-callout="红线"] strong {
+  color: var(--tj-danger);
+}
+
+/* Numbered list in redline: red markers */
+.trading-journal .callout[data-callout="redline"] ol > li::marker,
+.trading-journal .callout[data-callout="红线"] ol > li::marker {
+  color: var(--tj-danger);
+  font-weight: 800;
+}
+
+/* ── [!计划 / plan] Position action plans ─────────────────── */
+.trading-journal .callout[data-callout="plan"],
+.trading-journal .callout[data-callout="计划"] {
+  --callout-color: 129, 140, 248;
+  --callout-icon: lucide-target;
+  background: linear-gradient(135deg, var(--tj-plan-bg) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
+  border: 1px solid var(--tj-plan-border) !important;
+  border-left: 5px solid var(--tj-plan) !important;
+}
+
+.trading-journal .callout[data-callout="plan"] .callout-title,
+.trading-journal .callout[data-callout="计划"] .callout-title {
+  color: var(--tj-plan) !important;
+  font-size: 1.08em;
+}
+
+/* Plan callout table headers: purple */
+.trading-journal .callout[data-callout="plan"] th,
+.trading-journal .callout[data-callout="计划"] th {
+  color: var(--tj-plan);
+  background: var(--tj-plan-bg);
+  border-bottom-color: var(--tj-plan-border);
+}
+
+/* ── [!评分 / score] Discipline & plan scores ─────────────── */
+.trading-journal .callout[data-callout="score"],
+.trading-journal .callout[data-callout="评分"] {
+  --callout-color: 52, 211, 153;
+  --callout-icon: lucide-trophy;
+  background: linear-gradient(135deg, var(--tj-review-bg-deep) 0%, var(--tj-review-bg) 100%) !important;
+  border: 1px solid var(--tj-review-border) !important;
+  border-left: none !important;
+  text-align: center;
+  padding: 16px 24px !important;
+}
+
+.trading-journal .callout[data-callout="score"] .callout-title,
+.trading-journal .callout[data-callout="评分"] .callout-title {
+  justify-content: center;
+  font-size: 1.5em !important;
+  font-weight: 800;
+  color: var(--tj-review) !important;
+  letter-spacing: 0.02em;
+  padding: 8px 0;
+}
+
+.trading-journal .callout[data-callout="score"] .callout-content,
+.trading-journal .callout[data-callout="评分"] .callout-content {
+  font-size: 0.92em;
+  color: var(--text-muted);
+  padding-bottom: 12px;
+}
+
+/* ── [!改进 / improve] Post-session improvements ──────────── */
+.trading-journal .callout[data-callout="improve"],
+.trading-journal .callout[data-callout="改进"] {
+  --callout-color: 251, 191, 36;
+  --callout-icon: lucide-lightbulb;
+  background: linear-gradient(135deg, var(--tj-warn-bg) 0%, rgba(251, 191, 36, 0.05) 100%) !important;
+  border: 1px solid var(--tj-warn-border) !important;
+  border-left: 5px solid var(--tj-warn) !important;
+}
+
+.trading-journal .callout[data-callout="improve"] .callout-title,
+.trading-journal .callout[data-callout="改进"] .callout-title {
+  color: var(--tj-warn) !important;
+  font-size: 1.08em;
+}
+
+.trading-journal .callout[data-callout="improve"] ol > li::marker,
+.trading-journal .callout[data-callout="改进"] ol > li::marker {
+  color: var(--tj-warn);
+  font-weight: 700;
+}
+
+/* ── [!观察 / watchlist] Watch candidates ─────────────────── */
+.trading-journal .callout[data-callout="watchlist"],
+.trading-journal .callout[data-callout="观察"] {
+  --callout-color: 192, 132, 252;
+  --callout-icon: lucide-eye;
+  background: linear-gradient(135deg, var(--tj-watch-bg) 0%, rgba(192, 132, 252, 0.04) 100%) !important;
+  border: 1px solid var(--tj-watch-border) !important;
+  border-left: 5px solid var(--tj-watch) !important;
+}
+
+.trading-journal .callout[data-callout="watchlist"] .callout-title,
+.trading-journal .callout[data-callout="观察"] .callout-title {
+  color: var(--tj-watch) !important;
+  font-size: 1.08em;
+}
+
+.trading-journal .callout[data-callout="watchlist"] th,
+.trading-journal .callout[data-callout="观察"] th {
+  color: var(--tj-watch);
+  background: var(--tj-watch-bg);
+  border-bottom-color: var(--tj-watch-border);
+}
+
+/* ── [!价位 / levels] Key price levels ────────────────────── */
+.trading-journal .callout[data-callout="levels"],
+.trading-journal .callout[data-callout="价位"] {
+  --callout-color: 56, 189, 248;
+  --callout-icon: lucide-ruler;
+  background: linear-gradient(135deg, var(--tj-accent-bg) 0%, rgba(56, 189, 248, 0.04) 100%) !important;
+  border: 1px solid var(--tj-accent-border) !important;
+  border-left: 5px solid var(--tj-accent) !important;
+}
+
+.trading-journal .callout[data-callout="levels"] .callout-title,
+.trading-journal .callout[data-callout="价位"] .callout-title {
+  color: var(--tj-accent) !important;
+  font-size: 1.08em;
+}
+
+/* Monospace code block inside levels */
+.trading-journal .callout[data-callout="levels"] pre,
+.trading-journal .callout[data-callout="价位"] pre {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 0.92em;
+  line-height: 1.8;
+  color: var(--tj-accent);
+}
+
+.trading-journal .callout[data-callout="levels"] code,
+.trading-journal .callout[data-callout="价位"] code {
+  color: var(--tj-accent);
+}
+
+/* ============================================================
+   Additional polish
+   ============================================================ */
+
+/* ── Checkboxes (纪律自检) ────────────────────────────────── */
+.trading-journal .task-list-item {
+  padding: 4px 0;
+}
+
+.trading-journal .task-list-item-checkbox {
+  border-radius: 4px;
+  border: 2px solid var(--tj-plan-border);
+}
+
+.trading-journal .task-list-item-checkbox:checked {
+  background-color: var(--tj-review);
+  border-color: var(--tj-review);
+}
+
+/* ── Code blocks (outside callouts) ──────────────────────── */
+.trading-journal pre {
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 0.88em;
+  line-height: 1.7;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: var(--tj-shadow-sm);
+}
+
+/* ── Tag pills ────────────────────────────────────────────── */
+.trading-journal .tag {
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 0.82em;
+  background: var(--tj-plan-bg);
+  border: 1px solid var(--tj-plan-border);
+}
+
+/* ── Blockquote base (non-callout) ────────────────────────── */
+.trading-journal blockquote:not(.callout) {
+  border-left: 3px solid var(--tj-plan);
+  padding: 8px 16px;
+  background: var(--tj-card);
+  border-radius: 0 8px 8px 0;
+}
+
+/* ── Scrollbar styling ────────────────────────────────────── */
+.trading-journal ::-webkit-scrollbar-thumb {
+  background: var(--tj-plan-border);
+  border-radius: 4px;
+}
