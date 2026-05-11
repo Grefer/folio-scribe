@@ -1,53 +1,94 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex,nofollow,noarchive">
-    <title>__SITE_TITLE__</title>
-    <link rel="stylesheet" href="./assets/app.css">
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>__SITE_TITLE__</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="./assets/app.css">
+</head>
+
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="topbar-left">
         <div class="brand-bar">
-          <div class="brand-lockup">
-            <span class="brand-mark" aria-hidden="true"></span>
-            <div>
-              <p class="eyebrow">Private trading journal</p>
-              <h1>__SITE_TITLE__</h1>
-            </div>
-          </div>
+          <span class="brand-mark" aria-hidden="true">📝</span>
+          <h1 class="brand-title">__SITE_TITLE__</h1>
           <span class="status-pill" title="Private journal export">Private</span>
         </div>
+      </div>
 
+      <div class="topbar-right">
         <section class="stats-grid" aria-label="Journal stats">
           <div class="stat-card">
-            <span id="stat-notes">0</span>
+            <span class="stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M8 2v4"></path>
+                <path d="M16 2v4"></path>
+                <rect x="4" y="5" width="16" height="16" rx="2.5"></rect>
+                <path d="M4 10h16"></path>
+              </svg>
+            </span>
+            <span id="stat-notes" class="stat-value">0</span>
             <small>交易日</small>
           </div>
           <div class="stat-card">
-            <span id="stat-sections">0/0</span>
+            <span class="stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M20 6 9 17l-5-5"></path>
+              </svg>
+            </span>
+            <span id="stat-sections" class="stat-value">0/0</span>
             <small>已完成</small>
           </div>
           <div class="stat-card">
-            <span id="stat-completion">0%</span>
+            <span class="stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 19V5"></path>
+                <path d="M4 19h16"></path>
+                <path d="m7 15 4-4 3 3 5-7"></path>
+              </svg>
+            </span>
+            <span id="stat-completion" class="stat-value">0%</span>
             <small>完成率</small>
           </div>
         </section>
-
         <div class="theme-switch">
           <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Switch theme" aria-pressed="false">
-            <span class="theme-option theme-option-light">Light</span>
+            <span class="theme-option theme-option-light">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2"></path>
+                <path d="M12 20v2"></path>
+                <path d="m4.9 4.9 1.4 1.4"></path>
+                <path d="m17.7 17.7 1.4 1.4"></path>
+                <path d="M2 12h2"></path>
+                <path d="M20 12h2"></path>
+                <path d="m6.3 17.7-1.4 1.4"></path>
+                <path d="m19.1 4.9-1.4 1.4"></path>
+              </svg>
+            </span>
             <span class="theme-toggle-track" aria-hidden="true">
               <span class="theme-toggle-thumb"></span>
             </span>
-            <span class="theme-option theme-option-dark">Dark</span>
+            <span class="theme-option theme-option-dark">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a7 7 0 1 0 11 11Z"></path>
+              </svg>
+            </span>
           </button>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <div class="workspace">
+    <div class="workspace">
       <aside class="sidebar">
         <div class="sidebar-meta" aria-label="Export summary">
           <span>最新 <strong id="stat-latest">-</strong></span>
@@ -55,6 +96,12 @@
         </div>
 
         <div class="search-row">
+          <span class="search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m16.5 16.5 4 4"></path>
+            </svg>
+          </span>
           <input id="search-input" type="search" placeholder="搜索日期、标的、模型" autocomplete="off">
         </div>
 
@@ -66,7 +113,7 @@
           <button type="button" data-filter="us_review">美股总结</button>
         </nav>
 
-        <ol id="note-list" class="note-list" aria-label="Daily notes"></ol>
+        <div id="note-list" class="calendar-list" aria-label="Daily notes"></div>
       </aside>
 
       <main class="journal-view">
@@ -97,10 +144,11 @@
           <article id="journal-content" class="markdown-body"></article>
         </div>
       </main>
-      </div>
     </div>
+  </div>
 
-    <script src="./assets/journal-data.js"></script>
-    <script src="./assets/app.js"></script>
-  </body>
+  <script src="./assets/journal-data.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+
 </html>

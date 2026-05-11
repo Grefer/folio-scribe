@@ -4,6 +4,10 @@
   const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const state = {
     selectedDate: data.notes[0] ? data.notes[0].date : "",
+    currentMonth: data.notes[0] ? data.notes[0].date.substring(0, 7) : (() => {
+      const d = new Date();
+      return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+    })(),
     query: "",
     filter: "all",
     visibleSection: "all",
@@ -299,29 +303,87 @@
 
   function renderNoteList() {
     const notes = filteredNotes();
-    if (!notes.length) {
-      els.notes.innerHTML = '<li class="empty-state">没有匹配的交易日志。</li>';
-      return;
+    
+    // Create quick lookup
+    const notesByDate = {};
+    notes.forEach((note) => {
+      notesByDate[note.date] = note;
+    });
+
+    const [yearStr, monthStrNum] = state.currentMonth.split("-");
+    let year = parseInt(yearStr, 10);
+    let month = parseInt(monthStrNum, 10);
+    
+    // Ensure valid year/month fallback
+    if (isNaN(year) || isNaN(month)) {
+      const d = new Date();
+      year = d.getFullYear();
+      month = d.getMonth() + 1;
+      state.currentMonth = `${year}-${month.toString().padStart(2, "0")}`;
     }
 
-    els.notes.innerHTML = notes
-      .map((note) => {
+    const monthDate = new Date(year, month - 1, 1);
+    const monthName = monthDate.toLocaleString("zh-CN", { year: "numeric", month: "long" });
+    
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDay = new Date(year, month - 1, 1).getDay();
+    const startOffset = firstDay === 0 ? 6 : firstDay - 1;
+    const today = new Date();
+
+    // Month Navigation UI
+    let html = `
+      <div class="calendar-header">
+        <button type="button" class="calendar-nav prev-month" aria-label="Previous month">
+          <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg>
+        </button>
+        <div class="calendar-month-name">${escapeHtml(monthName)}</div>
+        <button type="button" class="calendar-nav next-month" aria-label="Next month">
+          <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>
+        </button>
+      </div>`;
+
+    if (notes.length === 0) {
+      html += `<div class="empty-state" style="margin-top: 20px;">当前筛选条件下没有交易日志。</div>`;
+    }
+
+    html += `
+      <div class="calendar-month">
+        <div class="calendar-weekdays">
+          <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+        </div>
+        <div class="calendar-grid">`;
+
+    for (let i = 0; i < startOffset; i++) {
+      html += `<div class="calendar-day empty"></div>`;
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${month.toString().padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
+      const note = notesByDate[dateStr];
+
+      if (note) {
         const active = note.date === state.selectedDate ? " active" : "";
-        const model = note.model ? escapeHtml(note.model) : "模型未知";
         const done = note.completedSectionCount || 0;
         const total = note.sectionCount || 0;
         const progress = percent(done, total);
-        return `<li><button type="button" class="note-item${active}" data-date="${escapeHtml(note.date)}">
-          <span class="note-top">
-            <strong class="note-date">${escapeHtml(note.date)}</strong>
-            <span class="note-count">${done}/${total}</span>
-          </span>
-          <span class="note-title">${escapeHtml(note.title)}</span>
-          <span class="note-meta"><span>${model}</span><span>${progress}%</span></span>
-          <span class="progress-rail" aria-hidden="true"><span class="progress-fill" style="width: ${progress}%"></span></span>
-        </button></li>`;
-      })
-      .join("");
+        
+        let ringClass = "progress-none";
+        if (progress === 100) ringClass = "progress-full";
+        else if (progress > 0) ringClass = "progress-partial";
+
+        html += `<button type="button" class="calendar-day has-note ${ringClass}${active}" data-date="${escapeHtml(dateStr)}" title="${escapeHtml(note.title)}">
+          <span class="day-number">${d}</span>
+          <span class="day-indicator"></span>
+        </button>`;
+      } else {
+        const isToday = today.getFullYear() === year && (today.getMonth() + 1) === month && today.getDate() === d;
+        const todayClass = isToday ? " today" : "";
+        html += `<div class="calendar-day${todayClass}"><span class="day-number">${d}</span></div>`;
+      }
+    }
+
+    html += `</div></div>`;
+    els.notes.innerHTML = html;
   }
 
   function renderSectionTabs(note) {
@@ -407,6 +469,7 @@
       state.filter = button.dataset.filter || "all";
       const notes = filteredNotes();
       state.selectedDate = notes[0] ? notes[0].date : "";
+      if (notes[0]) state.currentMonth = notes[0].date.substring(0, 7);
       state.visibleSection = "all";
       render();
     });
@@ -416,12 +479,29 @@
     state.query = els.search.value;
     const notes = filteredNotes();
     state.selectedDate = notes[0] ? notes[0].date : "";
+    if (notes[0]) state.currentMonth = notes[0].date.substring(0, 7);
     state.visibleSection = "all";
     render();
   });
 
   els.notes.addEventListener("click", (event) => {
-    const button = event.target.closest(".note-item");
+    // Handle month navigation
+    const prevBtn = event.target.closest(".prev-month");
+    const nextBtn = event.target.closest(".next-month");
+    
+    if (prevBtn || nextBtn) {
+      let [y, m] = state.currentMonth.split("-").map(Number);
+      if (prevBtn) m--;
+      if (nextBtn) m++;
+      if (m < 1) { m = 12; y--; }
+      if (m > 12) { m = 1; y++; }
+      state.currentMonth = `${y}-${m.toString().padStart(2, "0")}`;
+      renderNoteList();
+      return;
+    }
+
+    // Handle date selection
+    const button = event.target.closest(".calendar-day.has-note");
     if (!button) return;
     state.selectedDate = button.dataset.date;
     state.visibleSection = "all";

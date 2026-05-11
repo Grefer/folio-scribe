@@ -23,3 +23,6 @@ FutuOpenD.app/
 .com.futunn.FutuOpenD/
 *.dmg
 *.tar.gz
+
+# Mock data
+journal-data.js
