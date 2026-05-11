@@ -30,6 +30,18 @@
         <string>__AI_CLI__</string>
         <key>FOLIO_SCRIBE_AI_MODEL</key>
         <string>__AI_MODEL__</string>
+        <key>FOLIO_SCRIBE_WEB_EXPORT_DIR</key>
+        <string>__WEB_EXPORT_DIR__</string>
+        <key>FOLIO_SCRIBE_WEB_DEPLOY</key>
+        <string>__WEB_DEPLOY__</string>
+        <key>FOLIO_SCRIBE_VERCEL_PROJECT</key>
+        <string>__VERCEL_PROJECT__</string>
+        <key>FOLIO_SCRIBE_VERCEL_SCOPE</key>
+        <string>__VERCEL_SCOPE__</string>
+        <key>FOLIO_SCRIBE_VERCEL_TARGET</key>
+        <string>__VERCEL_TARGET__</string>
+        <key>FOLIO_SCRIBE_VERCEL_DOMAIN</key>
+        <string>__VERCEL_DOMAIN__</string>
     </dict>
     <key>WorkingDirectory</key>
     <string>__VAULT__</string>

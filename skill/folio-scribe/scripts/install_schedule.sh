@@ -24,6 +24,12 @@ SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # parent of scripts/
 AI_CLI="${FOLIO_SCRIBE_AI_CLI:-claude}"
 AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
 AI_MODEL="${FOLIO_SCRIBE_AI_MODEL:-}"
+WEB_EXPORT_DIR="${FOLIO_SCRIBE_WEB_EXPORT_DIR:-}"
+WEB_DEPLOY="${FOLIO_SCRIBE_WEB_DEPLOY:-}"
+VERCEL_PROJECT="${FOLIO_SCRIBE_VERCEL_PROJECT:-}"
+VERCEL_SCOPE="${FOLIO_SCRIBE_VERCEL_SCOPE:-}"
+VERCEL_TARGET="${FOLIO_SCRIBE_VERCEL_TARGET:-}"
+VERCEL_DOMAIN="${FOLIO_SCRIBE_VERCEL_DOMAIN:-}"
 
 usage() {
     cat <<'EOF'
@@ -45,6 +51,17 @@ Environment:
   FOLIO_SCRIBE_VAULT      Alternative to --vault flag
   FOLIO_SCRIBE_AI_CLI     AI CLI for scheduled generation (claude or codex)
   FOLIO_SCRIBE_AI_MODEL   Optional model override for the selected AI CLI
+  FOLIO_SCRIBE_WEB_EXPORT_DIR
+                          Optional static web dashboard output directory
+  FOLIO_SCRIBE_WEB_DEPLOY Optional web deploy target after export (vercel)
+  FOLIO_SCRIBE_VERCEL_PROJECT
+                          Vercel project name for web deploy
+  FOLIO_SCRIBE_VERCEL_SCOPE
+                          Vercel team slug for web deploy
+  FOLIO_SCRIBE_VERCEL_TARGET
+                          Vercel deploy target: production or preview
+  FOLIO_SCRIBE_VERCEL_DOMAIN
+                          Optional custom domain to keep on production deploys
 EOF
     exit 1
 }
@@ -83,6 +100,12 @@ do_install() {
     if [ -n "$AI_MODEL" ]; then
         echo "  AI model:  $AI_MODEL"
     fi
+    if [ -n "$WEB_EXPORT_DIR" ]; then
+        echo "  Web out:   $WEB_EXPORT_DIR"
+    fi
+    if [ -n "$WEB_DEPLOY" ]; then
+        echo "  Web deploy:$WEB_DEPLOY"
+    fi
     echo "  Log dir:   $VAULT/.logs"
     echo ""
 
@@ -93,10 +116,20 @@ do_install() {
         claude|codex) ;;
         *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_CLI '$AI_CLI'. Use: claude|codex"; exit 1 ;;
     esac
+    case "$WEB_DEPLOY" in
+        ""|vercel) ;;
+        *) echo "ERROR: Unsupported FOLIO_SCRIBE_WEB_DEPLOY '$WEB_DEPLOY'. Use: vercel"; exit 1 ;;
+    esac
     [ -x "$SKILL_DIR/scripts/run_folio_task.sh" ] || {
         echo "ERROR: run_folio_task.sh not found or not executable in $SKILL_DIR/scripts/"
         exit 1
     }
+    if [ "$WEB_DEPLOY" = "vercel" ]; then
+        [ -x "$SKILL_DIR/scripts/deploy_web_journal_vercel.sh" ] || {
+            echo "ERROR: deploy_web_journal_vercel.sh not found or not executable in $SKILL_DIR/scripts/"
+            exit 1
+        }
+    fi
 
     LOG_DIR="$VAULT/.logs"
     mkdir -p "$LOG_DIR" "$LAUNCHD_DST"
@@ -120,6 +153,12 @@ do_install() {
             -e "s|__HOME__|${HOME}|g" \
             -e "s|__AI_CLI__|${AI_CLI}|g" \
             -e "s|__AI_MODEL__|${AI_MODEL}|g" \
+            -e "s|__WEB_EXPORT_DIR__|${WEB_EXPORT_DIR}|g" \
+            -e "s|__WEB_DEPLOY__|${WEB_DEPLOY}|g" \
+            -e "s|__VERCEL_PROJECT__|${VERCEL_PROJECT}|g" \
+            -e "s|__VERCEL_SCOPE__|${VERCEL_SCOPE}|g" \
+            -e "s|__VERCEL_TARGET__|${VERCEL_TARGET}|g" \
+            -e "s|__VERCEL_DOMAIN__|${VERCEL_DOMAIN}|g" \
             -e "s|__LOG_DIR__|${LOG_DIR}|g" \
             "$src" > "$dst"
 

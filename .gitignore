@@ -7,6 +7,7 @@ __pycache__/
 .codex/
 dist/
 build/
+web-dist/
 *.egg-info/
 .DS_Store
 *.log

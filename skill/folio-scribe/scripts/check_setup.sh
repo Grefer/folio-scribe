@@ -184,6 +184,26 @@ else
     fail "read_futu_snapshot.py not found"
 fi
 
+if [ -f "$SCRIPT_DIR/build_web_journal.py" ]; then
+    if python3 "$SCRIPT_DIR/build_web_journal.py" --help &>/dev/null; then
+        pass "build_web_journal.py runnable"
+    else
+        fail "build_web_journal.py error"
+    fi
+else
+    fail "build_web_journal.py not found"
+fi
+
+if [ -x "$SCRIPT_DIR/deploy_web_journal_vercel.sh" ]; then
+    if "$SCRIPT_DIR/deploy_web_journal_vercel.sh" --help &>/dev/null; then
+        pass "deploy_web_journal_vercel.sh runnable"
+    else
+        fail "deploy_web_journal_vercel.sh help error"
+    fi
+else
+    warn "deploy_web_journal_vercel.sh not executable (only needed for Vercel deploys)"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────
 echo ""
 echo "────────────────────────────"

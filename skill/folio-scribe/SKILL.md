@@ -13,7 +13,12 @@ This skill is analytical and journaling-only by default. Do not submit, modify, 
 
 ## Workflow
 
-1. **Read live account context**
+1. **Read standing strategy context**
+   - When an Obsidian vault or journal folder is available, read standing rule files before judging discipline, especially `Rules/*.md`, strategy mandates, risk budgets, and position target notes.
+   - Treat documented long-term targets, allowed tactical ranges, and pre-declared rebuild/rebalance plans as part of the plan context.
+   - If a daily note conflicts with a newer standing strategy update, use the newer user-authored rule or mandate and call out the change instead of scoring it as an unexplained discipline failure.
+
+2. **Read live account context**
    - Positions: symbol, quantity, cost, market value, P/L, portfolio weight, margin/initial margin when shown.
    - Orders and fills: working/cancelled/filled orders, quantities, prices, timestamps.
    - Account risk: total assets, cash, margin, leverage, buying power, withdrawals, currency exposures.
@@ -21,18 +26,18 @@ This skill is analytical and journaling-only by default. Do not submit, modify, 
    - Options: contract multiplier, expiry, strike, bid/ask/last, Greeks if visible, assignment/exercise probability if available.
    - Fundamentals/news: use broker-provided financials, analyst summaries, company news, and announcements when available.
 
-2. **Respect dynamic data**
+3. **Respect dynamic data**
    - Never rely on stale conversation state for quantities, costs, orders, or fills.
    - If current broker data conflicts with prior chat, use the broker data and call out the change.
    - For lot-size markets, ensure recommended quantities match the instrument trading unit.
 
-3. **Separate outputs**
+4. **Separate outputs**
    - **Trading plan**: actionable plan for the current/next market session.
    - **Trading review**: session or end-of-day review against the plan.
    - **Watchlist module**: candidates to watch but not necessarily buy.
    - **Journal sync**: optional Markdown/Obsidian file output.
 
-4. **Avoid false precision**
+5. **Avoid false precision**
    - Give price zones and trigger conditions, not unconditional predictions.
    - Label high-risk ideas and leverage/margin effects plainly.
    - For options, explain what the contract covers and what risk remains uncovered.
@@ -120,10 +125,16 @@ Include:
 
 - Account and position changes.
 - Fills versus the original plan.
-- Whether each decision followed discipline.
+- Whether each decision followed discipline, comparing against both the daily plan and any standing rules or portfolio mandates.
 - Missed opportunities, sell-flying/FOMO, chasing, overtrading, and risk drift.
 - Updated next-session plan with concrete triggers.
 - Watchlist continuation/removal notes.
+
+If a working order moves the account toward a documented core position target, do not mark the order as a discipline failure solely because the earlier daily plan was more defensive. Instead, distinguish:
+
+- **Plan-compliant rebuild**: quantity, lot size, target exposure, and risk budget match a standing mandate.
+- **Risk drift**: the order is allowed by the mandate but uses too much leverage, breaks a stop/invalidating condition, or lacks a fresh trigger.
+- **Discipline breach**: the order exceeds the mandate, contradicts explicit risk limits, or was placed without a documented update.
 
 ## Obsidian / Markdown Sync
 
@@ -160,6 +171,14 @@ discipline_score:   # 1-10, filled in by review
 After writing a plan or review, update the `model` field to the current model identifier. Do **not** add financial account fields such as `total_assets`, `daily_pnl`, `leverage`, or per-position quantity fields (e.g. `xiaomi_shares`) to frontmatter — those belong in the note body only.
 
 Read `references/obsidian-format.md` for the recommended note structure and section layout.
+
+For reusable personal trading rules, prefer separate Markdown files under:
+
+```text
+<vault>/Rules/
+```
+
+Daily plans and reviews should reference these standing rules when scoring discipline, especially for long-term core position targets and active rebuild plans.
 
 ## Client Portability
 

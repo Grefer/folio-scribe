@@ -99,7 +99,9 @@ folio-scribe/
 │   │   ├── check_setup.sh           Health-check utility
 │   │   ├── write_daily_note.py      Obsidian note section writer
 │   │   ├── read_futu_snapshot.py    Futu OpenD snapshot reader
+│   │   ├── build_web_journal.py     Static private web dashboard exporter
 │   │   └── launchd/                 Plist templates
+│   ├── web-template/                Static dashboard HTML/CSS/JS
 │   └── references/                  Reference docs loaded on demand
 │
 ├── src/folio_scribe/             ← Reusable Python package
@@ -184,6 +186,68 @@ plan, review, hk_plan, hk_review, us_plan, us_review
 
 > [!NOTE]
 > For US markets viewed from Asia, the post-close review happens the next local morning. Folio Scribe writes it back to the **US session date** by default.
+
+## 🌐 Private Web Dashboard
+
+Export Daily notes into a static, mobile-friendly dashboard:
+
+```bash
+python3 skill/folio-scribe/scripts/build_web_journal.py \
+  --vault ~/Documents/Trading \
+  --out ~/Documents/TradingWeb \
+  --title "Trading Journal"
+```
+
+Preview locally:
+
+```bash
+python3 -m http.server 8787 --directory ~/Documents/TradingWeb
+```
+
+Then open `http://127.0.0.1:8787`.
+
+The output contains `index.html`, local assets, `data/journal.json`, and a `robots.txt` that disallows indexing. Deploy that output directory to Vercel, then protect access with Vercel Authentication. On Vercel Hobby, Standard Protection protects preview and deployment URLs, but production domains remain public; keep this journal on a protected preview URL unless your plan supports protecting all deployments.
+
+Safe Vercel deploy, creating a protected preview URL instead of a public production alias:
+
+```bash
+FOLIO_SCRIBE_VERCEL_SCOPE=<your-team-slug> \
+skill/folio-scribe/scripts/deploy_web_journal_vercel.sh \
+  --out ~/Documents/TradingWeb \
+  --project vercel-trading-journal
+```
+
+The deploy script links the output directory, enables Vercel SSO protection, and defaults to a preview deployment so the private journal is available only through the protected deployment URL it prints.
+
+For a private custom domain, add Basic Auth environment variables in Vercel, point DNS at Vercel, and deploy production through the custom-domain path:
+
+```bash
+FOLIO_SCRIBE_VERCEL_SCOPE=<your-team-slug> \
+FOLIO_SCRIBE_VERCEL_DOMAIN=folio.example.com \
+skill/folio-scribe/scripts/deploy_web_journal_vercel.sh \
+  --out ~/Documents/TradingWeb \
+  --project vercel-trading-journal
+```
+
+With `FOLIO_SCRIBE_VERCEL_DOMAIN` set, the script deploys production, keeps the custom domain alias, and removes automatic `*.vercel.app` aliases.
+
+To refresh the dashboard after every scheduled task, install launchd with:
+
+```bash
+FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
+
+To also redeploy after each scheduled refresh, opt in explicitly:
+
+```bash
+FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
+FOLIO_SCRIBE_WEB_DEPLOY=vercel \
+FOLIO_SCRIBE_VERCEL_PROJECT=vercel-trading-journal \
+FOLIO_SCRIBE_VERCEL_SCOPE=<your-team-slug> \
+FOLIO_SCRIBE_VERCEL_DOMAIN=folio.example.com \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
 
 ## ⏰ Scheduled Tasks
 
@@ -411,6 +475,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_CODEX_PROFILE` | unset | Optional Codex config profile |
 | `FOLIO_SCRIBE_CODEX_SANDBOX` | `read-only` | Codex exec sandbox mode |
 | `FOLIO_SCRIBE_CODEX_DISABLE_FEATURES` | `plugins apps` | Codex features disabled for lean text-only runs |
+| `FOLIO_SCRIBE_WEB_EXPORT_DIR` | unset | Optional static web dashboard output directory |
+| `FOLIO_SCRIBE_WEB_TITLE` | `Folio Scribe Journal` | Static web dashboard title |
 | `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print-mode budget cap |
 | `FOLIO_SCRIBE_LANG` | `zh` | Output language (`en` / `zh`) |
 
@@ -506,7 +572,9 @@ folio-scribe/
 │   │   ├── check_setup.sh           环境健康检查
 │   │   ├── write_daily_note.py      Obsidian 笔记 section 写入
 │   │   ├── read_futu_snapshot.py    Futu OpenD 快照读取
+│   │   ├── build_web_journal.py     私有静态 Web 看板导出
 │   │   └── launchd/                 Plist 模板
+│   ├── web-template/                静态看板 HTML/CSS/JS
 │   └── references/                  按需加载的参考文档
 │
 ├── src/folio_scribe/             ← 可复用 Python 包
@@ -589,6 +657,34 @@ plan, review, hk_plan, hk_review, us_plan, us_review
 
 > [!NOTE]
 > 美股收盘复盘通常发生在本地第二天早上。Folio Scribe 默认写回**美股交易所对应的交易日期**，而非本地日期。
+
+### 私有 Web 看板
+
+把 Daily notes 导出成静态、适配手机的交易日志看板：
+
+```bash
+python3 skill/folio-scribe/scripts/build_web_journal.py \
+  --vault ~/Documents/Trading \
+  --out ~/Documents/TradingWeb \
+  --title "Trading Journal"
+```
+
+本地预览：
+
+```bash
+python3 -m http.server 8787 --directory ~/Documents/TradingWeb
+```
+
+然后打开 `http://127.0.0.1:8787`。
+
+导出目录包含 `index.html`、本地前端资源、`data/journal.json` 和默认禁止索引的 `robots.txt`。把这个目录部署到 Vercel，并在托管平台侧启用 Vercel Authentication。Vercel Hobby 的 Standard Protection 可保护 preview/deployment URL，但 production domain 仍会公开；除非你的套餐支持保护所有部署，否则这类交易日志应先放在受保护的 preview URL 上。
+
+如需每次定时任务完成后自动刷新看板，安装 launchd 时设置：
+
+```bash
+FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
 
 ### 示例输出
 
@@ -748,6 +844,8 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 | `FOLIO_SCRIBE_CODEX_PROFILE` | 未设置 | 可选 Codex config profile |
 | `FOLIO_SCRIBE_CODEX_SANDBOX` | `read-only` | Codex exec 沙盒模式 |
 | `FOLIO_SCRIBE_CODEX_DISABLE_FEATURES` | `plugins apps` | 为轻量 text-only 运行禁用的 Codex features |
+| `FOLIO_SCRIBE_WEB_EXPORT_DIR` | 未设置 | 可选静态 Web 看板输出目录 |
+| `FOLIO_SCRIBE_WEB_TITLE` | `Folio Scribe Journal` | 静态 Web 看板标题 |
 | `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print 模式预算上限 |
 | `FOLIO_SCRIBE_LANG` | `zh` | 输出语言（`en` / `zh`） |
 

@@ -36,6 +36,9 @@ CODEX_CONFIG="${FOLIO_SCRIBE_CODEX_CONFIG:-$HOME/.codex/config.toml}"
 CODEX_PROFILE="${FOLIO_SCRIBE_CODEX_PROFILE:-}"
 CODEX_SANDBOX="${FOLIO_SCRIBE_CODEX_SANDBOX:-read-only}"
 CODEX_DISABLE_FEATURES="${FOLIO_SCRIBE_CODEX_DISABLE_FEATURES:-plugins apps}"
+WEB_EXPORT_DIR="${FOLIO_SCRIBE_WEB_EXPORT_DIR:-}"
+WEB_TITLE="${FOLIO_SCRIBE_WEB_TITLE:-Folio Scribe Journal}"
+WEB_DEPLOY="${FOLIO_SCRIBE_WEB_DEPLOY:-}"
 LANG_PREF="${FOLIO_SCRIBE_LANG:-zh}"   # zh | en
 LOG_DIR="$VAULT/.logs"
 MAX_OPEND_WAIT=90
@@ -351,6 +354,42 @@ else
     EXISTING_NOTE="(No existing daily note at ${NOTE_PATH}.)"
 fi
 
+RULES_DIR="$VAULT/Rules"
+RULES_CONTEXT=$(python3 - "$RULES_DIR" <<'PY'
+import sys
+from pathlib import Path
+
+rules_dir = Path(sys.argv[1])
+if not rules_dir.exists():
+    print("(No standing rules directory found.)")
+    raise SystemExit
+
+paths = sorted(path for path in rules_dir.glob("*.md") if path.is_file())
+if not paths:
+    print("(No standing rule files found.)")
+    raise SystemExit
+
+total_limit = 20000
+per_file_limit = 6000
+used = 0
+chunks = []
+
+for path in paths:
+    header = f"\n--- Rules/{path.name} ---\n"
+    text = path.read_text(encoding="utf-8", errors="replace").strip()
+    if len(text) > per_file_limit:
+        text = text[:per_file_limit] + "\n[Rule file truncated by runner.]"
+    chunk = header + text + "\n"
+    if used + len(chunk) > total_limit:
+        chunks.append("\n[Additional rule files omitted by runner due to context limit.]\n")
+        break
+    chunks.append(chunk)
+    used += len(chunk)
+
+print("".join(chunks).strip())
+PY
+)
+
 # ── Common prompt suffix ─────────────────────────────────────────────
 if [ "$LANG_PREF" = "en" ]; then
     PROMPT_SUFFIX="Output only the Markdown body for the target section. Do not include the second-level section heading, frontmatter, code fences, shell commands, or any tool-use instructions. The runner has already read data and will write the note after your response."
@@ -377,10 +416,13 @@ Folio Scribe 定时任务：生成港股交易计划。
 
 任务：基于下面的 Futu OpenD JSON 快照和已有 Daily 笔记，生成 ${NOTE_DATE} 的港股交易计划，中文输出。
 
-要求：包含账户快照、主要风险敞口、当前持仓、工作订单、标的计划、期权计划、观察清单、风险边界和今日不做什么。建议必须是条件式触发，不要给无条件预测，不要提出下单、改单或撤单动作，只做决策支持和日志内容。中文输出。
+要求：先读取并遵守下面的交易规则与长期策略。包含账户快照、主要风险敞口、当前持仓、工作订单、标的计划、期权计划、观察清单、风险边界和今日不做什么。建议必须是条件式触发，不要给无条件预测，不要提出下单、改单或撤单动作，只做决策支持和日志内容。中文输出。
 
 Futu OpenD 摘要：
 ${SNAPSHOT_CONTEXT}
+
+交易规则与长期策略：
+${RULES_CONTEXT}
 
 已有 Daily 笔记：
 ${EXISTING_NOTE}
@@ -393,10 +435,13 @@ Folio Scribe 定时任务：生成港股交易总结。
 
 任务：基于下面的 Futu OpenD JSON 快照和已有 Daily/${NOTE_DATE}.md，生成 ${NOTE_DATE} 的港股交易总结，中文输出。
 
-要求：包含账户和持仓变化、成交与计划对照、纪律评分、错过机会、风险漂移、下一交易时段触发价。只做复盘和日志内容，不提出自动下单、改单或撤单。中文输出。
+要求：先读取并遵守下面的交易规则与长期策略。纪律评分必须同时比较 Daily 计划和长期策略；如果后续用户规则更新覆盖了早盘计划，应说明覆盖关系，而不是直接判为纪律失败。包含账户和持仓变化、成交与计划对照、纪律评分、错过机会、风险漂移、下一交易时段触发价。只做复盘和日志内容，不提出自动下单、改单或撤单。中文输出。
 
 Futu OpenD 摘要：
 ${SNAPSHOT_CONTEXT}
+
+交易规则与长期策略：
+${RULES_CONTEXT}
 
 已有 Daily 笔记：
 ${EXISTING_NOTE}
@@ -409,10 +454,13 @@ Folio Scribe 定时任务：生成美股交易计划。
 
 任务：基于下面的 Futu OpenD JSON 快照和已有 Daily 笔记，生成 ${NOTE_DATE} 的美股交易计划，中文输出。
 
-要求：注意美股交易时段从本地 21:30 到次日 04:00（夏令时）。包含账户快照、风险敞口、当前持仓、工作订单、标的计划、观察清单、风险边界和今日不做什么。建议必须是条件式触发，只做决策支持和日志内容。中文输出。
+要求：先读取并遵守下面的交易规则与长期策略。注意美股交易时段从本地 21:30 到次日 04:00（夏令时）。包含账户快照、风险敞口、当前持仓、工作订单、标的计划、观察清单、风险边界和今日不做什么。建议必须是条件式触发，只做决策支持和日志内容。中文输出。
 
 Futu OpenD 摘要：
 ${SNAPSHOT_CONTEXT}
+
+交易规则与长期策略：
+${RULES_CONTEXT}
 
 已有 Daily 笔记：
 ${EXISTING_NOTE}
@@ -425,10 +473,13 @@ Folio Scribe 定时任务：生成美股交易总结。
 
 任务：基于下面的 Futu OpenD JSON 快照和已有 Daily/${NOTE_DATE}.md，生成美股交易总结，写入 ${NOTE_DATE}.md 对应的美股交易日期，中文输出。
 
-要求：包含账户和持仓变化、成交与计划对照、纪律评分、错过机会、风险漂移、下一交易时段触发价。只做复盘和日志内容，不提出自动下单、改单或撤单。中文输出。
+要求：先读取并遵守下面的交易规则与长期策略。纪律评分必须同时比较 Daily 计划和长期策略；如果后续用户规则更新覆盖了早盘计划，应说明覆盖关系，而不是直接判为纪律失败。包含账户和持仓变化、成交与计划对照、纪律评分、错过机会、风险漂移、下一交易时段触发价。只做复盘和日志内容，不提出自动下单、改单或撤单。中文输出。
 
 Futu OpenD 摘要：
 ${SNAPSHOT_CONTEXT}
+
+交易规则与长期策略：
+${RULES_CONTEXT}
 
 已有 Daily 笔记：
 ${EXISTING_NOTE}
@@ -448,10 +499,13 @@ Folio Scribe scheduled task: generate HK trading plan.
 
 Task: generate the HK trading plan for ${NOTE_DATE} from the Futu OpenD JSON snapshot and existing Daily note below.
 
-Requirements: include account snapshot, major risk exposures, current positions, working orders, instrument plan, option plan, watchlist, risk boundaries, and what not to do. Use conditional triggers, not unconditional predictions. Do not suggest automated order entry, modification, or cancellation. Output in English.
+Requirements: read and apply the standing trading rules and strategy mandates below first. Include account snapshot, major risk exposures, current positions, working orders, instrument plan, option plan, watchlist, risk boundaries, and what not to do. Use conditional triggers, not unconditional predictions. Do not suggest automated order entry, modification, or cancellation. Output in English.
 
 Futu OpenD summary:
 ${SNAPSHOT_CONTEXT}
+
+Standing trading rules and strategy mandates:
+${RULES_CONTEXT}
 
 Existing Daily note:
 ${EXISTING_NOTE}
@@ -464,10 +518,13 @@ Folio Scribe scheduled task: generate HK trading review.
 
 Task: generate the HK trading review for ${NOTE_DATE} from the Futu OpenD JSON snapshot and existing Daily note below.
 
-Requirements: include account and position changes, fills versus plan, discipline assessment, missed opportunities, risk drift, and next-session triggers. Do not suggest automated order entry, modification, or cancellation. Output in English.
+Requirements: read and apply the standing trading rules and strategy mandates below first. Discipline assessment must compare both the Daily plan and standing rules; if a newer user-authored rule supersedes the morning plan, explain that relationship instead of scoring it as an unexplained discipline failure. Include account and position changes, fills versus plan, discipline assessment, missed opportunities, risk drift, and next-session triggers. Do not suggest automated order entry, modification, or cancellation. Output in English.
 
 Futu OpenD summary:
 ${SNAPSHOT_CONTEXT}
+
+Standing trading rules and strategy mandates:
+${RULES_CONTEXT}
 
 Existing Daily note:
 ${EXISTING_NOTE}
@@ -480,10 +537,13 @@ Folio Scribe scheduled task: generate US trading plan.
 
 Task: generate the US trading plan for ${NOTE_DATE} from the Futu OpenD JSON snapshot and existing Daily note below.
 
-Requirements: note US session runs 21:30–04:00 local (daylight saving). Include account snapshot, risk exposures, current positions, working orders, instrument plan, watchlist, risk boundaries, and what not to do. Use conditional triggers and output in English.
+Requirements: read and apply the standing trading rules and strategy mandates below first. Note US session runs 21:30–04:00 local (daylight saving). Include account snapshot, risk exposures, current positions, working orders, instrument plan, watchlist, risk boundaries, and what not to do. Use conditional triggers and output in English.
 
 Futu OpenD summary:
 ${SNAPSHOT_CONTEXT}
+
+Standing trading rules and strategy mandates:
+${RULES_CONTEXT}
 
 Existing Daily note:
 ${EXISTING_NOTE}
@@ -496,10 +556,13 @@ Folio Scribe scheduled task: generate US trading review.
 
 Task: generate the US trading review for the US session date ${NOTE_DATE} from the Futu OpenD JSON snapshot and existing Daily note below.
 
-Requirements: include account and position changes, fills versus plan, discipline assessment, missed opportunities, risk drift, and next-session triggers. Compare decisions against the previous evening US plan. Output in English.
+Requirements: read and apply the standing trading rules and strategy mandates below first. Include account and position changes, fills versus plan, discipline assessment, missed opportunities, risk drift, and next-session triggers. Compare decisions against the previous evening US plan and standing rules. Output in English.
 
 Futu OpenD summary:
 ${SNAPSHOT_CONTEXT}
+
+Standing trading rules and strategy mandates:
+${RULES_CONTEXT}
 
 Existing Daily note:
 ${EXISTING_NOTE}
@@ -665,6 +728,29 @@ if [ -n "$AI_MODEL_LABEL" ]; then
     WRITER_ARGS+=(--model "$AI_MODEL_LABEL")
 fi
 "${WRITER_ARGS[@]}"
+
+if [ -n "$WEB_EXPORT_DIR" ]; then
+    echo "Refreshing web journal export ..."
+    python3 "$SCRIPT_DIR/build_web_journal.py" \
+        --vault "$VAULT" \
+        --out "$WEB_EXPORT_DIR" \
+        --title "$WEB_TITLE" \
+        --quiet
+
+    case "$WEB_DEPLOY" in
+        "")
+            ;;
+        vercel)
+            echo "Deploying web journal to Vercel ..."
+            FOLIO_SCRIBE_WEB_EXPORT_DIR="$WEB_EXPORT_DIR" \
+                "$SCRIPT_DIR/deploy_web_journal_vercel.sh"
+            ;;
+        *)
+            echo "ERROR: Unsupported FOLIO_SCRIBE_WEB_DEPLOY '$WEB_DEPLOY'. Use: vercel"
+            exit 1
+            ;;
+    esac
+fi
 
 echo ""
 echo "=== Done at $(date '+%Y-%m-%d %H:%M:%S') ==="
