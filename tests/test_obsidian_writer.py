@@ -8,6 +8,7 @@ from folio_scribe.journal.obsidian import (
     SECTION_MARKERS,
     default_note,
     replace_section,
+    set_frontmatter_model,
     write_daily_note,
 )
 
@@ -99,6 +100,20 @@ class ReplaceSectionTests(unittest.TestCase):
         self.assertIn("Review content.", result)
 
 
+class FrontmatterModelTests(unittest.TestCase):
+    def test_sets_existing_model_field(self) -> None:
+        note = "---\ndate: 2026-05-08\nmodel:\n---\n\n# Note\n"
+        result = set_frontmatter_model(note, "opus")
+        self.assertIn("model: opus", result)
+        self.assertNotIn("model:\n", result)
+
+    def test_inserts_model_field_when_missing(self) -> None:
+        note = "---\ndate: 2026-05-08\n---\n\n# Note\n"
+        result = set_frontmatter_model(note, "gpt-5.5")
+        self.assertIn("model: gpt-5.5", result)
+        self.assertTrue(result.startswith("---\ndate: 2026-05-08\nmodel: gpt-5.5\n---"))
+
+
 class WriteDailyNoteTests(unittest.TestCase):
     """Integration tests for write_daily_note."""
 
@@ -160,6 +175,19 @@ class WriteDailyNoteTests(unittest.TestCase):
             path = write_daily_note(vault, "2026-05-08", "hk_plan", "Test.", daily_dir="Notes")
             self.assertEqual(path.parent.name, "Notes")
             self.assertTrue(path.exists())
+
+    def test_model_argument_updates_frontmatter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            path = write_daily_note(
+                vault,
+                "2026-05-08",
+                "港股计划",
+                "Plan.",
+                chinese=True,
+                model="opus",
+            )
+            self.assertIn("model: opus", path.read_text(encoding="utf-8"))
 
 
 class SectionMarkersConsistencyTests(unittest.TestCase):

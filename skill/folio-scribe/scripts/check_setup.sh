@@ -6,7 +6,7 @@
 # Checks:
 #   1. Python ≥ 3.10 available
 #   2. bundled scripts runnable
-#   3. Claude CLI installed and on PATH
+#   3. Selected AI CLI installed and on PATH
 #   4. Obsidian vault exists with Daily/ directory
 #   5. Futu OpenD reachable on expected port
 #   6. launchd agents loaded (macOS only)
@@ -20,6 +20,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
 OPEND_PORT="${FOLIO_SCRIBE_OPEND_PORT:-11111}"
+AI_CLI="${FOLIO_SCRIBE_AI_CLI:-claude}"
+AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
 
 # ── Parse args ──────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
@@ -71,15 +73,30 @@ else
     warn "journal.obsidian module not importable (optional package API)"
 fi
 
-# ── 3. Claude CLI ───────────────────────────────────────────────────
+# ── 3. AI CLI ───────────────────────────────────────────────────────
 echo ""
-echo "Claude CLI:"
-CLAUDE="${FOLIO_SCRIBE_CLAUDE:-$(command -v claude 2>/dev/null || echo "")}"
-if [ -n "$CLAUDE" ] && [ -x "$CLAUDE" ]; then
-    pass "claude at $CLAUDE"
-else
-    fail "claude CLI not found (install from https://docs.anthropic.com/en/docs/claude-code)"
-fi
+echo "AI CLI ($AI_CLI):"
+case "$AI_CLI" in
+    claude)
+        CLAUDE="${FOLIO_SCRIBE_CLAUDE:-$(command -v claude 2>/dev/null || echo "")}"
+        if [ -n "$CLAUDE" ] && [ -x "$CLAUDE" ]; then
+            pass "claude at $CLAUDE"
+        else
+            fail "claude CLI not found (install from https://docs.anthropic.com/en/docs/claude-code)"
+        fi
+        ;;
+    codex)
+        CODEX="${FOLIO_SCRIBE_CODEX:-$(command -v codex 2>/dev/null || echo "")}"
+        if [ -n "$CODEX" ] && [ -x "$CODEX" ]; then
+            pass "codex at $CODEX"
+        else
+            fail "codex CLI not found"
+        fi
+        ;;
+    *)
+        fail "unsupported FOLIO_SCRIBE_AI_CLI '$AI_CLI' (use claude or codex)"
+        ;;
+esac
 
 # ── 4. Obsidian vault ──────────────────────────────────────────────
 echo ""

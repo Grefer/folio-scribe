@@ -248,8 +248,10 @@ cat ~/Documents/Trading/.logs/launchd-hk-plan.out
 - 💻 Mac must be **awake** at trigger time
 - 📅 US Friday review can run on local Saturday morning
 - 🔑 Futu OpenD auto-launches but must have been **logged in at least once**
-- 🤖 Uses Claude Code global model setting; auto-falls back to Sonnet when overloaded
-- 🔒 Uses a narrow tool allowlist — does **not** enable `--dangerously-skip-permissions`
+- 🤖 Uses `FOLIO_SCRIBE_AI_CLI=claude` by default; set `FOLIO_SCRIBE_AI_CLI=codex` to generate through Codex CLI
+- 🔒 The scheduler reads Futu and writes notes itself; the AI CLI only generates text
+- 🧾 Claude runs in JSON mode and records actual `modelUsage` key(s) in note frontmatter when available
+- 🔁 Reinstall launchd with `FOLIO_SCRIBE_AI_CLI=codex skill/folio-scribe/scripts/install_schedule.sh install` to persist a Codex-backed schedule
 
 </details>
 
@@ -397,9 +399,19 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault path |
 | `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD app path |
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD port |
+| `FOLIO_SCRIBE_AI_CLI` | `claude` | Text-generation CLI (`claude` / `codex`) |
+| `FOLIO_SCRIBE_AI_MODEL` | CLI default | Explicit model override for the selected CLI |
 | `FOLIO_SCRIBE_CLAUDE` | Auto-detected | Claude Code CLI path |
-| `FOLIO_SCRIBE_CLAUDE_PERMISSION_MODE` | `acceptEdits` | Claude Code permission mode |
-| `FOLIO_SCRIBE_ALLOWED_TOOLS` | Limited allowlist | Claude Code tool allowlist |
+| `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | Claude Code settings file used for env/model |
+| `FOLIO_SCRIBE_CLAUDE_MODEL` | Current Claude Code model | Claude-specific model override, kept for compatibility |
+| `FOLIO_SCRIBE_CLAUDE_FALLBACK_MODEL` | unset | Optional fallback model |
+| `FOLIO_SCRIBE_CODEX` | Auto-detected | Codex CLI path |
+| `FOLIO_SCRIBE_CODEX_CONFIG` | `~/.codex/config.toml` | Codex config used to record the configured model |
+| `FOLIO_SCRIBE_CODEX_MODEL` | Current Codex model | Codex-specific model override |
+| `FOLIO_SCRIBE_CODEX_PROFILE` | unset | Optional Codex config profile |
+| `FOLIO_SCRIBE_CODEX_SANDBOX` | `read-only` | Codex exec sandbox mode |
+| `FOLIO_SCRIBE_CODEX_DISABLE_FEATURES` | `plugins apps` | Codex features disabled for lean text-only runs |
+| `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print-mode budget cap |
 | `FOLIO_SCRIBE_LANG` | `zh` | Output language (`en` / `zh`) |
 
 ## 🔒 Safety Boundaries
@@ -710,8 +722,10 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 - 电脑需处于开机且未休眠状态
 - 美股周五复盘可在本地周六早上运行
 - Futu OpenD 自动启动，但需已登录过一次
-- 使用 Claude Code 全局模型，Opus 过载时降级到 Sonnet
-- 使用限定工具 allowlist，**不**启用 `--dangerously-skip-permissions`
+- 默认使用 `FOLIO_SCRIBE_AI_CLI=claude`；设置 `FOLIO_SCRIBE_AI_CLI=codex` 可切换为 Codex CLI 生成
+- 调度器自行读取 Futu 并写入笔记；AI CLI 只负责生成文本
+- Claude 模式会使用 JSON 输出，并在可用时把 `modelUsage` 里的实际模型 key 写入笔记 frontmatter；如果一次调用涉及多个内部模型，会全部记录
+- 如需让 launchd 持久使用 Codex，执行 `FOLIO_SCRIBE_AI_CLI=codex skill/folio-scribe/scripts/install_schedule.sh install` 重装定时任务
 
 </details>
 
@@ -722,9 +736,19 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 | `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault 路径 |
 | `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD 应用路径 |
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD 端口 |
+| `FOLIO_SCRIBE_AI_CLI` | `claude` | 文本生成 CLI（`claude` / `codex`） |
+| `FOLIO_SCRIBE_AI_MODEL` | CLI 默认值 | 当前 CLI 的显式模型覆盖 |
 | `FOLIO_SCRIBE_CLAUDE` | 自动检测 | Claude Code CLI 路径 |
-| `FOLIO_SCRIBE_CLAUDE_PERMISSION_MODE` | `acceptEdits` | Claude Code 权限模式 |
-| `FOLIO_SCRIBE_ALLOWED_TOOLS` | 限定 allowlist | Claude Code 工具白名单 |
+| `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | 用于读取 env/model 的 Claude Code 设置文件 |
+| `FOLIO_SCRIBE_CLAUDE_MODEL` | 当前 Claude Code 模型 | Claude 专用模型覆盖，保留兼容 |
+| `FOLIO_SCRIBE_CLAUDE_FALLBACK_MODEL` | 未设置 | 可选 fallback 模型 |
+| `FOLIO_SCRIBE_CODEX` | 自动检测 | Codex CLI 路径 |
+| `FOLIO_SCRIBE_CODEX_CONFIG` | `~/.codex/config.toml` | 用于记录当前模型的 Codex 配置文件 |
+| `FOLIO_SCRIBE_CODEX_MODEL` | 当前 Codex 模型 | Codex 专用模型覆盖 |
+| `FOLIO_SCRIBE_CODEX_PROFILE` | 未设置 | 可选 Codex config profile |
+| `FOLIO_SCRIBE_CODEX_SANDBOX` | `read-only` | Codex exec 沙盒模式 |
+| `FOLIO_SCRIBE_CODEX_DISABLE_FEATURES` | `plugins apps` | 为轻量 text-only 运行禁用的 Codex features |
+| `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print 模式预算上限 |
 | `FOLIO_SCRIBE_LANG` | `zh` | 输出语言（`en` / `zh`） |
 
 ### 安全边界

@@ -21,6 +21,9 @@ LABELS=(
 # ── Defaults (override with flags) ──────────────────────────────────
 VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # parent of scripts/
+AI_CLI="${FOLIO_SCRIBE_AI_CLI:-claude}"
+AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
+AI_MODEL="${FOLIO_SCRIBE_AI_MODEL:-}"
 
 usage() {
     cat <<'EOF'
@@ -39,7 +42,9 @@ Options (install only):
   --skill-dir PATH   Skill directory path (default: auto-detected from script location)
 
 Environment:
-  FOLIO_SCRIBE_VAULT   Alternative to --vault flag
+  FOLIO_SCRIBE_VAULT      Alternative to --vault flag
+  FOLIO_SCRIBE_AI_CLI     AI CLI for scheduled generation (claude or codex)
+  FOLIO_SCRIBE_AI_MODEL   Optional model override for the selected AI CLI
 EOF
     exit 1
 }
@@ -74,12 +79,20 @@ do_install() {
     echo "Installing folio-scribe scheduled tasks"
     echo "  Vault:     $VAULT"
     echo "  Skill dir: $SKILL_DIR"
+    echo "  AI CLI:    $AI_CLI"
+    if [ -n "$AI_MODEL" ]; then
+        echo "  AI model:  $AI_MODEL"
+    fi
     echo "  Log dir:   $VAULT/.logs"
     echo ""
 
     # Validate
     [ -d "$VAULT" ]     || { echo "ERROR: Vault not found: $VAULT"; exit 1; }
     [ -d "$SKILL_DIR" ] || { echo "ERROR: Skill dir not found: $SKILL_DIR"; exit 1; }
+    case "$AI_CLI" in
+        claude|codex) ;;
+        *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_CLI '$AI_CLI'. Use: claude|codex"; exit 1 ;;
+    esac
     [ -x "$SKILL_DIR/scripts/run_folio_task.sh" ] || {
         echo "ERROR: run_folio_task.sh not found or not executable in $SKILL_DIR/scripts/"
         exit 1
@@ -105,6 +118,8 @@ do_install() {
             -e "s|__SKILL_DIR__|${SKILL_DIR}|g" \
             -e "s|__VAULT__|${VAULT}|g" \
             -e "s|__HOME__|${HOME}|g" \
+            -e "s|__AI_CLI__|${AI_CLI}|g" \
+            -e "s|__AI_MODEL__|${AI_MODEL}|g" \
             -e "s|__LOG_DIR__|${LOG_DIR}|g" \
             "$src" > "$dst"
 

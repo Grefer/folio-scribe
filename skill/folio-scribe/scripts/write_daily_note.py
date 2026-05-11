@@ -90,6 +90,33 @@ def replace_section(note: str, start_marker: str, end_marker: str | None, conten
     return note[:content_start] + replacement + note[end:].lstrip("\n")
 
 
+def set_frontmatter_model(note: str, model: str | None) -> str:
+    if not model:
+        return note
+
+    lines = note.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return f"---\nmodel: {model}\n---\n\n{note}"
+
+    end_index = None
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            end_index = index
+            break
+
+    if end_index is None:
+        return note
+
+    model_line = f"model: {model}\n"
+    for index in range(1, end_index):
+        if lines[index].startswith("model:"):
+            lines[index] = model_line
+            return "".join(lines)
+
+    lines.insert(end_index, model_line)
+    return "".join(lines)
+
+
 def write_daily_note(
     vault: str | Path,
     date: str,
@@ -97,6 +124,7 @@ def write_daily_note(
     content: str,
     daily_dir: str = "Daily",
     chinese: bool = False,
+    model: str | None = None,
 ) -> Path:
     if section not in SECTION_MARKERS:
         raise ValueError(f"Unknown section: {section}")
@@ -115,6 +143,7 @@ def write_daily_note(
 
     start_marker, end_marker = SECTION_MARKERS[section]
     updated = replace_section(note, start_marker, end_marker, content)
+    updated = set_frontmatter_model(updated, model)
     note_path.write_text(updated, encoding="utf-8")
     return note_path
 
@@ -129,10 +158,11 @@ def main() -> int:
     parser.add_argument("--content", required=True, help="Path to Markdown content")
     parser.add_argument("--daily-dir", default="Daily")
     parser.add_argument("--chinese", action="store_true", help="Create Chinese headings for new notes")
+    parser.add_argument("--model", help="Model identifier to write into frontmatter")
     args = parser.parse_args()
 
     content = Path(args.content).read_text(encoding="utf-8")
-    path = write_daily_note(args.vault, args.date, args.section, content, args.daily_dir, args.chinese)
+    path = write_daily_note(args.vault, args.date, args.section, content, args.daily_dir, args.chinese, args.model)
     print(path)
     return 0
 
