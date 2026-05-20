@@ -98,6 +98,8 @@ Plan body.
             data = build_web_journal.build_site(vault, out, "Trading Journal")
 
             self.assertEqual(data["stats"]["noteCount"], 1)
+            self.assertEqual(data["summaries"]["weekly"], [])
+            self.assertEqual(data["summaries"]["monthly"], [])
             self.assertTrue((out / "index.html").exists())
             self.assertTrue((out / "assets" / "app.css").exists())
             self.assertTrue((out / "assets" / "app.js").exists())
@@ -106,6 +108,134 @@ Plan body.
             self.assertTrue((out / "middleware.js").exists())
             self.assertTrue((out / "package.json").exists())
             self.assertIn("Disallow: /", (out / "robots.txt").read_text(encoding="utf-8"))
+
+    def test_build_site_exports_weekly_and_monthly_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            daily = vault / "Daily"
+            weekly = vault / "Weekly"
+            monthly = vault / "Monthly"
+            daily.mkdir(parents=True)
+            weekly.mkdir()
+            monthly.mkdir()
+            (daily / "2026-05-11.md").write_text(
+                """---
+date: 2026-05-11
+model: gpt-5.5
+---
+
+# 2026-05-11 交易日志
+
+## 08:45 港股交易计划
+
+Plan body.
+""",
+                encoding="utf-8",
+            )
+            (weekly / "2026-W20.md").write_text(
+                """---
+period: weekly
+id: 2026-W20
+type: trading-weekly
+start_date: 2026-05-11
+end_date: 2026-05-17
+daily_count: 1
+completed_sections: 1
+total_sections: 4
+tags: [trading, broker-journal, periodic-review, weekly-review]
+model: codex:gpt-5.5
+generated_at: 2026-05-18T00:00:00+00:00
+---
+
+# 2026-W20 交易周总结
+
+Weekly body.
+""",
+                encoding="utf-8",
+            )
+            (monthly / "2026-05.md").write_text(
+                """---
+period: monthly
+id: 2026-05
+type: trading-monthly
+start_date: 2026-05-01
+end_date: 2026-05-31
+daily_count: 1
+completed_sections: 1
+total_sections: 4
+tags: [trading, broker-journal, periodic-review, monthly-review]
+model: codex:gpt-5.5
+generated_at: 2026-05-18T00:00:00+00:00
+---
+
+# 2026-05 月度交易总结
+
+Monthly body.
+""",
+                encoding="utf-8",
+            )
+
+            data = build_web_journal.build_site(vault, root / "site", "Trading Journal")
+
+            self.assertEqual(data["stats"]["weeklyCount"], 1)
+            self.assertEqual(data["stats"]["monthlyCount"], 0)
+            self.assertEqual(data["summaries"]["weekly"][0]["id"], "2026-W20")
+            self.assertEqual(data["summaries"]["weekly"][0]["dailyCount"], "1")
+            self.assertEqual(data["summaries"]["weekly"][0]["anchorDate"], "2026-05-11")
+            self.assertEqual(data["summaries"]["weekly"][0]["displayRange"], "2026-05-11 - 2026-05-11")
+            self.assertIn("Weekly body.", data["summaries"]["weekly"][0]["rawMarkdown"])
+
+    def test_build_site_exports_ready_monthly_summary_on_month_end_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            daily = vault / "Daily"
+            monthly = vault / "Monthly"
+            daily.mkdir(parents=True)
+            monthly.mkdir()
+            (daily / "2026-04-30.md").write_text(
+                """---
+date: 2026-04-30
+model: gpt-5.5
+---
+
+# 2026-04-30 交易日志
+
+## 08:45 港股交易计划
+
+Plan body.
+""",
+                encoding="utf-8",
+            )
+            (monthly / "2026-04.md").write_text(
+                """---
+period: monthly
+id: 2026-04
+type: trading-monthly
+start_date: 2026-04-01
+end_date: 2026-04-30
+daily_count: 1
+completed_sections: 1
+total_sections: 4
+tags: [trading, broker-journal, periodic-review, monthly-review]
+model: codex:gpt-5.5
+generated_at: 2026-05-01T00:00:00+00:00
+---
+
+# 2026-04 月度交易总结
+
+Monthly body.
+""",
+                encoding="utf-8",
+            )
+
+            data = build_web_journal.build_site(vault, root / "site", "Trading Journal")
+
+            self.assertEqual(data["stats"]["monthlyCount"], 1)
+            self.assertEqual(data["summaries"]["monthly"][0]["id"], "2026-04")
+            self.assertEqual(data["summaries"]["monthly"][0]["anchorDate"], "2026-04-30")
+            self.assertEqual(data["summaries"]["monthly"][0]["displayRange"], "2026-04-01 - 2026-04-30")
 
 
 if __name__ == "__main__":

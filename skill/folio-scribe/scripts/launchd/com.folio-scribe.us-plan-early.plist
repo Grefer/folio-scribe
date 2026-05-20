@@ -3,23 +3,23 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.folio-scribe.hk-plan</string>
+    <string>com.folio-scribe.us-plan-early</string>
     <key>ProgramArguments</key>
     <array>
         <string>__SKILL_DIR__/scripts/run_folio_task.sh</string>
-        <string>hk_plan</string>
+        <string>us_plan</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>__HK_PLAN_HOUR__</integer>
+        <integer>__US_PLAN_EARLY_HOUR__</integer>
         <key>Minute</key>
-        <integer>__HK_PLAN_MINUTE__</integer>
+        <integer>__US_PLAN_EARLY_MINUTE__</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>__LOG_DIR__/launchd-hk-plan.out</string>
+    <string>__LOG_DIR__/launchd-us-plan-early.out</string>
     <key>StandardErrorPath</key>
-    <string>__LOG_DIR__/launchd-hk-plan.err</string>
+    <string>__LOG_DIR__/launchd-us-plan-early.err</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
@@ -32,6 +32,8 @@
         <string>__AI_FALLBACK_CLI__</string>
         <key>FOLIO_SCRIBE_AI_MODEL</key>
         <string>__AI_MODEL__</string>
+        <key>FOLIO_SCRIBE_PLAN_PHASE</key>
+        <string>early</string>
         <key>FOLIO_SCRIBE_WEB_EXPORT_DIR</key>
         <string>__WEB_EXPORT_DIR__</string>
         <key>FOLIO_SCRIBE_WEB_TITLE</key>

@@ -180,6 +180,24 @@ For reusable personal trading rules, prefer separate Markdown files under:
 
 Daily plans and reviews should reference these standing rules when scoring discipline, especially for long-term core position targets and active rebuild plans.
 
+## Weekly / Monthly Reviews
+
+For higher-level reviews, keep summaries outside Daily notes:
+
+```text
+<vault>/Weekly/YYYY-Www.md
+<vault>/Monthly/YYYY-MM.md
+```
+
+Use weekly reviews for execution quality, recurring behavior, risk drift, and the next week's action framework. Use monthly reviews for strategy effectiveness, account structure, major correct/error decisions, and rule updates. Do not merely concatenate Daily notes; extract patterns, discipline lessons, and system changes.
+
+The bundled helper can generate these from existing Daily notes:
+
+```bash
+python3 scripts/write_periodic_summary.py --vault /path/to/vault --period weekly
+python3 scripts/write_periodic_summary.py --vault /path/to/vault --period monthly
+```
+
 ## Client Portability
 
 Keep the skill usable across Codex, Claude Code, Cursor, Cline/Roo, JetBrains assistants, and future AI clients.

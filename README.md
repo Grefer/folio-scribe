@@ -206,6 +206,15 @@ python3 -m http.server 8787 --directory ~/Documents/TradingWeb
 
 Then open `http://127.0.0.1:8787`.
 
+The same build can be run through the sync wrapper used by automations:
+
+```bash
+skill/folio-scribe/scripts/sync_tradingweb.sh \
+  --vault ~/Documents/Trading \
+  --out ~/Documents/TradingWeb \
+  --title "Trading Journal"
+```
+
 The output contains `index.html`, local assets, `data/journal.json`, and a `robots.txt` that disallows indexing. Deploy that output directory to Vercel, then protect access with Vercel Authentication. On Vercel Hobby, Standard Protection protects preview and deployment URLs, but production domains remain public; keep this journal on a protected preview URL unless your plan supports protecting all deployments.
 
 Safe Vercel deploy, creating a protected preview URL instead of a public production alias:
@@ -236,6 +245,21 @@ To refresh the dashboard after every scheduled task, install launchd with:
 ```bash
 FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
 skill/folio-scribe/scripts/install_schedule.sh install
+```
+
+To refresh after manual Obsidian edits to `Daily/` or `Rules/`, install the optional WatchPaths agent:
+
+```bash
+FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
+FOLIO_SCRIBE_WEB_WATCH=1 \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
+
+Or install only the WatchPaths sync agent without touching the four market-session schedules:
+
+```bash
+FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
+skill/folio-scribe/scripts/install_schedule.sh install-web-sync
 ```
 
 To also redeploy after each scheduled refresh, opt in explicitly:
@@ -269,6 +293,16 @@ skill/folio-scribe/scripts/install_schedule.sh install --vault ~/Documents/MyVau
 | `08:45` | 🇭🇰 HK Trading Plan | Before HK market open |
 | `16:15` | 🇭🇰 HK Trading Review | After HK market close |
 | `20:45` | 🇺🇸 US Trading Plan | Before US market open |
+
+These are defaults. Override them during install with local `HH:MM` values:
+
+```bash
+FOLIO_SCRIBE_HK_PLAN_TIME=08:40 \
+FOLIO_SCRIBE_HK_REVIEW_TIME=16:20 \
+FOLIO_SCRIBE_US_PLAN_TIME=20:50 \
+FOLIO_SCRIBE_US_REVIEW_TIME=06:50 \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
 
 ### Auto-Detection Rules
 
@@ -314,7 +348,8 @@ cat ~/Documents/Trading/.logs/launchd-hk-plan.out
 - 🔑 Futu OpenD auto-launches but must have been **logged in at least once**
 - 🤖 Uses `FOLIO_SCRIBE_AI_CLI=claude` by default; set `FOLIO_SCRIBE_AI_CLI=codex` to generate through Codex CLI
 - 🔒 The scheduler reads Futu and writes notes itself; the AI CLI only generates text
-- 🧾 Claude runs in JSON mode and records actual `modelUsage` key(s) in note frontmatter when available
+- 🧾 Claude runs in JSON mode and records `modelUsage`; when CC Switch exposes an upstream mapping, the note frontmatter is resolved to the real provider/model (for example `codex:gpt-5.5`)
+- 🧱 Scheduled prompts use fixed Markdown templates and market isolation: HK tasks only receive/write HK symbols, US tasks only receive/write US symbols
 - 🔁 Reinstall launchd with `FOLIO_SCRIBE_AI_CLI=codex skill/folio-scribe/scripts/install_schedule.sh install` to persist a Codex-backed schedule
 
 </details>
@@ -463,7 +498,10 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault path |
 | `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD app path |
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD port |
+| `FOLIO_SCRIBE_SNAPSHOT_READY_WAIT` | `60` | Seconds to wait for Futu account/position data after OpenD becomes reachable |
+| `FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL` | `5` | Retry interval while waiting for Futu snapshot data |
 | `FOLIO_SCRIBE_AI_CLI` | `claude` | Text-generation CLI (`claude` / `codex`) |
+| `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `codex` | Fallback CLI used when Claude fails (`codex` / `none`) |
 | `FOLIO_SCRIBE_AI_MODEL` | CLI default | Explicit model override for the selected CLI |
 | `FOLIO_SCRIBE_CLAUDE` | Auto-detected | Claude Code CLI path |
 | `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | Claude Code settings file used for env/model |
@@ -475,8 +513,20 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_CODEX_PROFILE` | unset | Optional Codex config profile |
 | `FOLIO_SCRIBE_CODEX_SANDBOX` | `read-only` | Codex exec sandbox mode |
 | `FOLIO_SCRIBE_CODEX_DISABLE_FEATURES` | `plugins apps` | Codex features disabled for lean text-only runs |
+| `FOLIO_SCRIBE_CC_SWITCH_DB` | `~/.cc-switch/cc-switch.db` | Optional CC Switch database used to resolve Claude proxy labels to upstream model labels |
 | `FOLIO_SCRIBE_WEB_EXPORT_DIR` | unset | Optional static web dashboard output directory |
 | `FOLIO_SCRIBE_WEB_TITLE` | `Folio Scribe Journal` | Static web dashboard title |
+| `FOLIO_SCRIBE_WEB_DEPLOY` | unset | Optional web deploy target (`vercel`) |
+| `FOLIO_SCRIBE_WEB_WATCH` | unset | Set to `1` to install the TradingWeb WatchPaths sync agent |
+| `FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE` | `8` for WatchPaths, `0` for direct sync | Seconds to wait before syncing after a file-change trigger |
+| `FOLIO_SCRIBE_HK_PLAN_TIME` | `08:45` | launchd local time for HK plan |
+| `FOLIO_SCRIBE_HK_REVIEW_TIME` | `16:15` | launchd local time for HK review |
+| `FOLIO_SCRIBE_US_PLAN_TIME` | `20:45` | launchd local time for US plan |
+| `FOLIO_SCRIBE_US_REVIEW_TIME` | `06:45` | launchd local time for US review |
+| `FOLIO_SCRIBE_WATCHLIST_MODE` | `dynamic` | Watchlist candidate mode: `dynamic`, `manual`, or `off` |
+| `FOLIO_SCRIBE_WATCHLIST_LIMIT` | `24` | Maximum dynamic candidates passed to the AI |
+| `FOLIO_SCRIBE_HK_WATCHLIST` | unset | Optional manual HK candidate symbols appended to or used instead of dynamic candidates |
+| `FOLIO_SCRIBE_US_WATCHLIST` | unset | Optional manual US candidate symbols appended to or used instead of dynamic candidates |
 | `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print-mode budget cap |
 | `FOLIO_SCRIBE_LANG` | `zh` | Output language (`en` / `zh`) |
 
@@ -677,6 +727,15 @@ python3 -m http.server 8787 --directory ~/Documents/TradingWeb
 
 然后打开 `http://127.0.0.1:8787`。
 
+自动化内部使用同一个同步包装脚本，也可以手动执行：
+
+```bash
+skill/folio-scribe/scripts/sync_tradingweb.sh \
+  --vault ~/Documents/Trading \
+  --out ~/Documents/TradingWeb \
+  --title "Trading Journal"
+```
+
 导出目录包含 `index.html`、本地前端资源、`data/journal.json` 和默认禁止索引的 `robots.txt`。把这个目录部署到 Vercel，并在托管平台侧启用 Vercel Authentication。Vercel Hobby 的 Standard Protection 可保护 preview/deployment URL，但 production domain 仍会公开；除非你的套餐支持保护所有部署，否则这类交易日志应先放在受保护的 preview URL 上。
 
 如需每次定时任务完成后自动刷新看板，安装 launchd 时设置：
@@ -684,6 +743,21 @@ python3 -m http.server 8787 --directory ~/Documents/TradingWeb
 ```bash
 FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
 skill/folio-scribe/scripts/install_schedule.sh install
+```
+
+如需在 Obsidian 手动编辑 `Daily/` 或 `Rules/` 后也自动刷新，安装 WatchPaths 监听：
+
+```bash
+FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
+FOLIO_SCRIBE_WEB_WATCH=1 \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
+
+如果只想安装 WatchPaths 同步，不改动四个交易时段定时任务：
+
+```bash
+FOLIO_SCRIBE_WEB_EXPORT_DIR=~/Documents/TradingWeb \
+skill/folio-scribe/scripts/install_schedule.sh install-web-sync
 ```
 
 ### 示例输出
@@ -791,6 +865,16 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `16:15` | 🇭🇰 港股交易总结 | 收盘后 |
 | `20:45` | 🇺🇸 美股交易计划 | 美股开盘前 |
 
+以上是默认值。安装时可用本地 `HH:MM` 时间覆盖：
+
+```bash
+FOLIO_SCRIBE_HK_PLAN_TIME=08:40 \
+FOLIO_SCRIBE_HK_REVIEW_TIME=16:20 \
+FOLIO_SCRIBE_US_PLAN_TIME=20:50 \
+FOLIO_SCRIBE_US_REVIEW_TIME=06:50 \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
+
 自动判断规则（无参数运行时）：
 
 | 本地时间 | 任务 |
@@ -820,7 +904,8 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 - Futu OpenD 自动启动，但需已登录过一次
 - 默认使用 `FOLIO_SCRIBE_AI_CLI=claude`；设置 `FOLIO_SCRIBE_AI_CLI=codex` 可切换为 Codex CLI 生成
 - 调度器自行读取 Futu 并写入笔记；AI CLI 只负责生成文本
-- Claude 模式会使用 JSON 输出，并在可用时把 `modelUsage` 里的实际模型 key 写入笔记 frontmatter；如果一次调用涉及多个内部模型，会全部记录
+- Claude 模式会使用 JSON 输出并读取 `modelUsage`；如果 CC Switch 能提供上游映射，会把笔记 frontmatter 解析成真实 provider/model（例如 `codex:gpt-5.5`）
+- 定时任务 prompt 使用固定 Markdown 模板，并执行市场隔离：港股任务只读/写港股标的，美股任务只读/写美股标的
 - 如需让 launchd 持久使用 Codex，执行 `FOLIO_SCRIBE_AI_CLI=codex skill/folio-scribe/scripts/install_schedule.sh install` 重装定时任务
 
 </details>
@@ -832,7 +917,10 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 | `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault 路径 |
 | `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD 应用路径 |
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD 端口 |
+| `FOLIO_SCRIBE_SNAPSHOT_READY_WAIT` | `60` | OpenD 端口可连后等待账户/持仓数据就绪的秒数 |
+| `FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL` | `5` | 等待 Futu 快照数据时的重试间隔 |
 | `FOLIO_SCRIBE_AI_CLI` | `claude` | 文本生成 CLI（`claude` / `codex`） |
+| `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `codex` | Claude 失败时使用的兜底 CLI（`codex` / `none`） |
 | `FOLIO_SCRIBE_AI_MODEL` | CLI 默认值 | 当前 CLI 的显式模型覆盖 |
 | `FOLIO_SCRIBE_CLAUDE` | 自动检测 | Claude Code CLI 路径 |
 | `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | 用于读取 env/model 的 Claude Code 设置文件 |
@@ -844,8 +932,20 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 | `FOLIO_SCRIBE_CODEX_PROFILE` | 未设置 | 可选 Codex config profile |
 | `FOLIO_SCRIBE_CODEX_SANDBOX` | `read-only` | Codex exec 沙盒模式 |
 | `FOLIO_SCRIBE_CODEX_DISABLE_FEATURES` | `plugins apps` | 为轻量 text-only 运行禁用的 Codex features |
+| `FOLIO_SCRIBE_CC_SWITCH_DB` | `~/.cc-switch/cc-switch.db` | 可选 CC Switch 数据库，用于把 Claude 代理标签解析为真实上游模型标签 |
 | `FOLIO_SCRIBE_WEB_EXPORT_DIR` | 未设置 | 可选静态 Web 看板输出目录 |
 | `FOLIO_SCRIBE_WEB_TITLE` | `Folio Scribe Journal` | 静态 Web 看板标题 |
+| `FOLIO_SCRIBE_WEB_DEPLOY` | 未设置 | 可选 Web 发布目标（`vercel`） |
+| `FOLIO_SCRIBE_WEB_WATCH` | 未设置 | 设置为 `1` 时安装 TradingWeb WatchPaths 自动同步 |
+| `FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE` | WatchPaths 为 `8`，直接同步为 `0` | 文件变更触发后等待多少秒再同步 |
+| `FOLIO_SCRIBE_HK_PLAN_TIME` | `08:45` | 港股计划 launchd 本地触发时间 |
+| `FOLIO_SCRIBE_HK_REVIEW_TIME` | `16:15` | 港股总结 launchd 本地触发时间 |
+| `FOLIO_SCRIBE_US_PLAN_TIME` | `20:45` | 美股计划 launchd 本地触发时间 |
+| `FOLIO_SCRIBE_US_REVIEW_TIME` | `06:45` | 美股总结 launchd 本地触发时间 |
+| `FOLIO_SCRIBE_WATCHLIST_MODE` | `dynamic` | 推荐关注候选模式：`dynamic`、`manual` 或 `off` |
+| `FOLIO_SCRIBE_WATCHLIST_LIMIT` | `24` | 传给 AI 的动态候选数量上限 |
+| `FOLIO_SCRIBE_HK_WATCHLIST` | 未设置 | 可选手动港股候选，追加到动态候选；`manual` 模式下只使用它 |
+| `FOLIO_SCRIBE_US_WATCHLIST` | 未设置 | 可选手动美股候选，追加到动态候选；`manual` 模式下只使用它 |
 | `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print 模式预算上限 |
 | `FOLIO_SCRIBE_LANG` | `zh` | 输出语言（`en` / `zh`） |
 

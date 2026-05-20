@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a private static web dashboard from Folio Scribe Daily notes."""
+"""Build a private static web dashboard from Folio Scribe journal notes."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -162,6 +162,111 @@ def parse_daily_note(path: Path) -> dict[str, Any]:
     }
 
 
+def parse_periodic_note(path: Path, period: str) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    frontmatter, body = parse_frontmatter(text)
+
+    title = path.stem
+    title_match = re.search(r"^#\s+(.+?)\s*$", body, flags=re.MULTILINE)
+    if title_match:
+        title = title_match.group(1).strip()
+
+    period_id = str(frontmatter.get("id") or path.stem)
+    start_date = str(frontmatter.get("start_date") or "")
+    end_date = str(frontmatter.get("end_date") or "")
+    daily_count = str(frontmatter.get("daily_count") or "")
+    completed_sections = str(frontmatter.get("completed_sections") or "")
+    total_sections = str(frontmatter.get("total_sections") or "")
+
+    return {
+        "id": period_id,
+        "period": period,
+        "title": title,
+        "sourceFile": path.name,
+        "startDate": start_date,
+        "endDate": end_date,
+        "dailyCount": daily_count,
+        "completedSectionCount": completed_sections,
+        "sectionCount": total_sections,
+        "model": str(frontmatter.get("model") or ""),
+        "tags": frontmatter.get("tags") or [],
+        "generatedAt": str(frontmatter.get("generated_at") or ""),
+        "rawMarkdown": body,
+    }
+
+
+def parse_iso_date(value: Any) -> date | None:
+    try:
+        text = str(value or "")
+        if not text:
+            return None
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def display_range(start: str, end: str) -> str:
+    if start and end:
+        return f"{start} - {end}"
+    return start or end or ""
+
+
+def last_weekday_on_or_before(day: date) -> date:
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return day
+
+
+def enrich_periodic_notes(notes: list[dict[str, Any]], daily_notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    daily_dates = sorted(str(note.get("date") or "") for note in daily_notes if note.get("date"))
+    today = datetime.now(timezone.utc).date()
+    enriched: list[dict[str, Any]] = []
+
+    for note in notes:
+        start = parse_iso_date(note.get("startDate"))
+        end = parse_iso_date(note.get("endDate"))
+        if not start or not end:
+            enriched.append(note)
+            continue
+
+        trading_dates = [item for item in daily_dates if start.isoformat() <= item <= end.isoformat()]
+        trading_start = trading_dates[0] if trading_dates else ""
+        trading_end = trading_dates[-1] if trading_dates else ""
+
+        if note.get("period") == "monthly":
+            anchor = last_weekday_on_or_before(end)
+            generated = parse_iso_date(note.get("generatedAt"))
+            if anchor > today or (generated and generated < anchor):
+                continue
+            display_start = start.isoformat()
+            display_end = anchor.isoformat()
+        else:
+            anchor = parse_iso_date(trading_end) or last_weekday_on_or_before(end)
+            display_start = trading_start or start.isoformat()
+            display_end = trading_end or anchor.isoformat()
+
+        note = dict(note)
+        note["tradingStartDate"] = trading_start
+        note["tradingEndDate"] = trading_end
+        note["anchorDate"] = anchor.isoformat()
+        note["displayRange"] = display_range(display_start, display_end)
+        enriched.append(note)
+
+    return enriched
+
+
+def build_periodic_notes(vault: Path, directory: str, period: str, limit: int | None = None) -> list[dict[str, Any]]:
+    notes_dir = vault / directory
+    if not notes_dir.exists():
+        return []
+
+    notes = [parse_periodic_note(path, period) for path in sorted(notes_dir.glob("*.md"))]
+    notes.sort(key=lambda note: note["id"], reverse=True)
+    if limit is not None:
+        notes = notes[:limit]
+    return notes
+
+
 def build_journal_data(vault: Path, daily_dir: str = "Daily", limit: int | None = None) -> dict[str, Any]:
     daily_path = vault / daily_dir
     if not daily_path.exists():
@@ -175,6 +280,8 @@ def build_journal_data(vault: Path, daily_dir: str = "Daily", limit: int | None 
     completed = sum(note["completedSectionCount"] for note in notes)
     total_sections = sum(note["sectionCount"] for note in notes)
     latest = notes[0] if notes else None
+    weekly_notes = enrich_periodic_notes(build_periodic_notes(vault, "Weekly", "weekly", limit=limit), notes)
+    monthly_notes = enrich_periodic_notes(build_periodic_notes(vault, "Monthly", "monthly", limit=limit), notes)
 
     return {
         "schemaVersion": 1,
@@ -186,9 +293,15 @@ def build_journal_data(vault: Path, daily_dir: str = "Daily", limit: int | None 
             "completedSectionCount": completed,
             "latestDate": latest["date"] if latest else "",
             "latestModel": latest["model"] if latest else "",
+            "weeklyCount": len(weekly_notes),
+            "monthlyCount": len(monthly_notes),
         },
         "sections": [{"key": key, "label": SECTION_LABELS[key]} for key in SECTION_ORDER[:-1]],
         "notes": notes,
+        "summaries": {
+            "weekly": weekly_notes,
+            "monthly": monthly_notes,
+        },
     }
 
 
@@ -235,7 +348,7 @@ def build_site(vault: Path, out_dir: Path, title: str, daily_dir: str = "Daily",
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a static private web dashboard from Folio Scribe Daily notes.")
+    parser = argparse.ArgumentParser(description="Build a static private web dashboard from Folio Scribe journal notes.")
     parser.add_argument("--vault", required=True, help="Obsidian vault path")
     parser.add_argument("--out", required=True, help="Output directory for the static site")
     parser.add_argument("--daily-dir", default="Daily", help="Daily notes directory inside the vault")

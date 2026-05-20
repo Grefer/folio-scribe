@@ -111,22 +111,22 @@ fi
 (
     cd "$OUT_DIR"
 
-    "${VERCEL_CMD[@]}" link \
+        "${VERCEL_CMD[@]}" link \
         --yes \
         --project "$PROJECT" \
-        "${SCOPE_ARGS[@]}" \
+        ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
         --no-color
 
     if [ "$ENABLE_SSO" = "1" ]; then
         "${VERCEL_CMD[@]}" project protection enable "$PROJECT" \
             --sso \
-            "${SCOPE_ARGS[@]}" \
+            ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
             --no-color
     fi
 
     if [ -n "$DOMAIN" ]; then
         "${VERCEL_CMD[@]}" domains add "$DOMAIN" \
-            "${SCOPE_ARGS[@]}" \
+            ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
             --no-color || true
     fi
 
@@ -140,7 +140,7 @@ fi
 
     DEPLOY_JSON=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-vercel-deploy-json.XXXXXX")
     DEPLOY_LOG=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-vercel-deploy-log.XXXXXX")
-    if ! "${VERCEL_CMD[@]}" "${DEPLOY_ARGS[@]}" "${SCOPE_ARGS[@]}" > "$DEPLOY_JSON" 2> "$DEPLOY_LOG"; then
+    if ! "${VERCEL_CMD[@]}" "${DEPLOY_ARGS[@]}" ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} > "$DEPLOY_JSON" 2> "$DEPLOY_LOG"; then
         cat "$DEPLOY_LOG" >&2
         cat "$DEPLOY_JSON" >&2
         exit 1
@@ -207,7 +207,7 @@ PY
     if [ "$PUBLIC_ALIAS" -eq 0 ]; then
         ALIAS_LIST=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-vercel-alias-list.XXXXXX")
         ALIASES_TO_REMOVE=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-vercel-alias-remove.XXXXXX")
-        if "${VERCEL_CMD[@]}" alias list "${SCOPE_ARGS[@]}" --no-color > "$ALIAS_LIST"; then
+        if "${VERCEL_CMD[@]}" alias list ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} --no-color > "$ALIAS_LIST"; then
             python3 - "$ALIAS_LIST" "$PROJECT" > "$ALIASES_TO_REMOVE" <<'PY'
 import sys
 from pathlib import Path
@@ -233,7 +233,7 @@ PY
                     [ -n "$alias" ] || continue
                     "${VERCEL_CMD[@]}" alias remove "$alias" \
                         --yes \
-                        "${SCOPE_ARGS[@]}" \
+                        ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} \
                         --no-color
                 done < "$ALIASES_TO_REMOVE"
             fi

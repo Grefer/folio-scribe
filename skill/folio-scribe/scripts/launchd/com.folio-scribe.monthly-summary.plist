@@ -3,23 +3,28 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.folio-scribe.hk-plan</string>
+    <string>com.folio-scribe.monthly-summary</string>
     <key>ProgramArguments</key>
     <array>
-        <string>__SKILL_DIR__/scripts/run_folio_task.sh</string>
-        <string>hk_plan</string>
+        <string>__SKILL_DIR__/scripts/write_periodic_summary.py</string>
+        <string>--vault</string>
+        <string>__VAULT__</string>
+        <string>--period</string>
+        <string>monthly</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
+        <key>MonthDay</key>
+        <integer>1</integer>
         <key>Hour</key>
-        <integer>__HK_PLAN_HOUR__</integer>
+        <integer>__MONTHLY_SUMMARY_HOUR__</integer>
         <key>Minute</key>
-        <integer>__HK_PLAN_MINUTE__</integer>
+        <integer>__MONTHLY_SUMMARY_MINUTE__</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>__LOG_DIR__/launchd-hk-plan.out</string>
+    <string>__LOG_DIR__/launchd-monthly-summary.out</string>
     <key>StandardErrorPath</key>
-    <string>__LOG_DIR__/launchd-hk-plan.err</string>
+    <string>__LOG_DIR__/launchd-monthly-summary.err</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

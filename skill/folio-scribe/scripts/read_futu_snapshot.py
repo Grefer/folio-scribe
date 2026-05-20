@@ -74,11 +74,19 @@ class Fill:
 @dataclass(frozen=True)
 class Quote:
     symbol: str
+    name: str | None = None
     price: Money | None = None
+    quote_time: str | None = None
     open: Money | None = None
     high: Money | None = None
     low: Money | None = None
     previous_close: Money | None = None
+    pre_price: Money | None = None
+    pre_high_price: Money | None = None
+    pre_low_price: Money | None = None
+    pre_volume: Decimal | None = None
+    after_price: Money | None = None
+    overnight_price: Money | None = None
     volume: Decimal | None = None
     turnover: Money | None = None
     bid: Money | None = None
@@ -303,11 +311,19 @@ class FutuOpenAPIDataSource:
                 continue
             quotes[symbol] = Quote(
                 symbol=symbol,
+                name=row.get("stock_name") or row.get("name"),
                 price=_decimal(row.get("last_price")),
+                quote_time=str(_first_present(row, "update_time", "data_time") or ""),
                 open=_decimal(row.get("open_price")),
                 high=_decimal(row.get("high_price")),
                 low=_decimal(row.get("low_price")),
                 previous_close=_decimal(row.get("prev_close_price")),
+                pre_price=_decimal(row.get("pre_price")),
+                pre_high_price=_decimal(row.get("pre_high_price")),
+                pre_low_price=_decimal(row.get("pre_low_price")),
+                pre_volume=_decimal(row.get("pre_volume")),
+                after_price=_decimal(row.get("after_price")),
+                overnight_price=_decimal(row.get("overnight_price")),
                 volume=_decimal(row.get("volume")),
                 turnover=_decimal(row.get("turnover")),
                 raw=dict(row),

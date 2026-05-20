@@ -58,11 +58,19 @@ class Fill:
 @dataclass(frozen=True)
 class Quote:
     symbol: str
+    name: str | None = None
     price: Money | None = None
+    quote_time: str | None = None
     open: Money | None = None
     high: Money | None = None
     low: Money | None = None
     previous_close: Money | None = None
+    pre_price: Money | None = None
+    pre_high_price: Money | None = None
+    pre_low_price: Money | None = None
+    pre_volume: Decimal | None = None
+    after_price: Money | None = None
+    overnight_price: Money | None = None
     volume: Decimal | None = None
     turnover: Money | None = None
     bid: Money | None = None

@@ -82,6 +82,98 @@ class SkillBundlePortabilityTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Read a Futu OpenD snapshot as JSON", result.stdout)
 
+    def test_copied_bundle_watchlist_selector_help_does_not_need_repo_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            copied_skill = tmp_path / "folio-scribe"
+            shutil.copytree(SKILL_DIR, copied_skill)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(copied_skill / "scripts" / "select_watchlist_candidates.py"),
+                    "--help",
+                ],
+                cwd=tmp_path,
+                env=_clean_env(),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Select dynamic", result.stdout)
+
+    def test_copied_bundle_model_resolver_runs_without_repo_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            copied_skill = tmp_path / "folio-scribe"
+            shutil.copytree(SKILL_DIR, copied_skill)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(copied_skill / "scripts" / "resolve_model_label.py"),
+                    "--cli",
+                    "claude",
+                    "--label",
+                    "claude:claude-opus-4-7",
+                    "--cc-switch-db",
+                    str(tmp_path / "missing.db"),
+                ],
+                cwd=tmp_path,
+                env=_clean_env(),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "claude:claude-opus-4-7")
+
+    def test_copied_bundle_web_sync_help_does_not_need_repo_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            copied_skill = tmp_path / "folio-scribe"
+            shutil.copytree(SKILL_DIR, copied_skill)
+
+            result = subprocess.run(
+                [
+                    str(copied_skill / "scripts" / "sync_tradingweb.sh"),
+                    "--help",
+                ],
+                cwd=tmp_path,
+                env=_clean_env(),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Builds the static TradingWeb dashboard", result.stdout)
+
+    def test_copied_bundle_periodic_summary_help_does_not_need_repo_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            copied_skill = tmp_path / "folio-scribe"
+            shutil.copytree(SKILL_DIR, copied_skill)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(copied_skill / "scripts" / "write_periodic_summary.py"),
+                    "--help",
+                ],
+                cwd=tmp_path,
+                env=_clean_env(),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Generate Weekly/Monthly", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,35 +3,32 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.folio-scribe.hk-plan</string>
+    <string>com.folio-scribe.web-sync</string>
     <key>ProgramArguments</key>
     <array>
-        <string>__SKILL_DIR__/scripts/run_folio_task.sh</string>
-        <string>hk_plan</string>
+        <string>__SKILL_DIR__/scripts/sync_tradingweb.sh</string>
+        <string>--debounce</string>
+        <string>__WEB_SYNC_DEBOUNCE__</string>
     </array>
-    <key>StartCalendarInterval</key>
-    <dict>
-        <key>Hour</key>
-        <integer>__HK_PLAN_HOUR__</integer>
-        <key>Minute</key>
-        <integer>__HK_PLAN_MINUTE__</integer>
-    </dict>
+    <key>WatchPaths</key>
+    <array>
+        <string>__VAULT__/Daily</string>
+        <string>__VAULT__/Weekly</string>
+        <string>__VAULT__/Monthly</string>
+        <string>__VAULT__/Rules</string>
+    </array>
     <key>StandardOutPath</key>
-    <string>__LOG_DIR__/launchd-hk-plan.out</string>
+    <string>__LOG_DIR__/launchd-web-sync.out</string>
     <key>StandardErrorPath</key>
-    <string>__LOG_DIR__/launchd-hk-plan.err</string>
+    <string>__LOG_DIR__/launchd-web-sync.err</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Frameworks/Python.framework/Versions/3.13/bin</string>
         <key>HOME</key>
         <string>__HOME__</string>
-        <key>FOLIO_SCRIBE_AI_CLI</key>
-        <string>__AI_CLI__</string>
-        <key>FOLIO_SCRIBE_AI_FALLBACK_CLI</key>
-        <string>__AI_FALLBACK_CLI__</string>
-        <key>FOLIO_SCRIBE_AI_MODEL</key>
-        <string>__AI_MODEL__</string>
+        <key>FOLIO_SCRIBE_VAULT</key>
+        <string>__VAULT__</string>
         <key>FOLIO_SCRIBE_WEB_EXPORT_DIR</key>
         <string>__WEB_EXPORT_DIR__</string>
         <key>FOLIO_SCRIBE_WEB_TITLE</key>

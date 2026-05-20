@@ -1,15 +1,16 @@
 (function () {
-  const data = window.FOLIO_JOURNAL_DATA || { notes: [], stats: {}, sections: [] };
+  const data = window.FOLIO_JOURNAL_DATA || { notes: [], stats: {}, sections: [], summaries: {} };
+  data.summaries = data.summaries || { weekly: [], monthly: [] };
   const THEME_STORAGE_KEY = "folio-scribe-theme";
   const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const state = {
     selectedDate: data.notes[0] ? data.notes[0].date : "",
+    selectedEntry: "daily",
     currentMonth: data.notes[0] ? data.notes[0].date.substring(0, 7) : (() => {
       const d = new Date();
       return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
     })(),
     query: "",
-    filter: "all",
     visibleSection: "all",
   };
 
@@ -19,6 +20,9 @@
     statNotes: document.getElementById("stat-notes"),
     statSections: document.getElementById("stat-sections"),
     statCompletion: document.getElementById("stat-completion"),
+    statNotesLabel: document.getElementById("stat-notes-label"),
+    statSectionsLabel: document.getElementById("stat-sections-label"),
+    statCompletionLabel: document.getElementById("stat-completion-label"),
     statLatest: document.getElementById("stat-latest"),
     generatedAt: document.getElementById("generated-at"),
     selectedDate: document.getElementById("selected-date"),
@@ -191,9 +195,9 @@
         continue;
       }
 
-      const heading = trimmed.match(/^(#{3,6})\s+(.+)$/);
+      const heading = trimmed.match(/^(#{2,6})\s+(.+)$/);
       if (heading) {
-        const level = Math.min(heading[1].length, 4);
+        const level = Math.min(Math.max(heading[1].length, 3), 4);
         parts.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
         index += 1;
         continue;
@@ -244,7 +248,7 @@
           current.startsWith("```") ||
           current.startsWith(">") ||
           current === "---" ||
-          /^#{3,6}\s+/.test(current) ||
+          /^#{2,6}\s+/.test(current) ||
           /^[-*]\s+/.test(current) ||
           /^\d+\.\s+/.test(current) ||
           (lines[index].includes("|") && index + 1 < lines.length && isTableSeparator(lines[index + 1]))
@@ -275,52 +279,205 @@
       .toLowerCase();
   }
 
-  function filteredNotes() {
+  function summaryText(summary) {
+    return [
+      summary.id,
+      summary.title,
+      summary.model,
+      summary.startDate,
+      summary.endDate,
+      (summary.tags || []).join(" "),
+      summary.rawMarkdown || "",
+    ]
+      .join(" ")
+      .toLowerCase();
+  }
+
+  function matchesQuery(text) {
     const query = state.query.trim().toLowerCase();
-    return data.notes.filter((note) => {
-      const matchesQuery = !query || noteText(note).includes(query);
-      const matchesFilter =
-        state.filter === "all" ||
-        note.sections.some((section) => section.key === state.filter && !section.pending);
-      return matchesQuery && matchesFilter;
-    });
+    return !query || String(text || "").toLowerCase().includes(query);
+  }
+
+  function filteredNotes() {
+    return data.notes.filter((note) => matchesQuery(noteText(note)));
+  }
+
+  function summariesFor(kind) {
+    return (data.summaries && data.summaries[kind]) || [];
+  }
+
+  function filteredSummaries(kind) {
+    return summariesFor(kind).filter((summary) => matchesQuery(summaryText(summary)));
   }
 
   function selectedNote() {
-    return data.notes.find((note) => note.date === state.selectedDate) || filteredNotes()[0] || data.notes[0];
+    return filteredNotes().find((note) => note.date === state.selectedDate) || null;
+  }
+
+  function noteByDate(dateStr) {
+    return data.notes.find((note) => note.date === dateStr) || null;
+  }
+
+  function summaryRange(summary) {
+    if (!summary) return "-";
+    if (summary.displayRange) return summary.displayRange;
+    if (summary.startDate && summary.endDate) {
+      return `${summary.startDate} - ${summary.endDate}`;
+    }
+    return summary.id || "-";
+  }
+
+  function monthKeyFromDate(value) {
+    return String(value || "").slice(0, 7);
+  }
+
+  function dateInRange(dateStr, startDate, endDate) {
+    if (!dateStr || !startDate || !endDate) return false;
+    return dateStr >= startDate && dateStr <= endDate;
+  }
+
+  function summaryAnchorDate(summary) {
+    if (!summary) return "";
+    if (summary.anchorDate) return summary.anchorDate;
+    const datedNotes = data.notes
+      .map((note) => note.date)
+      .filter((dateStr) => dateInRange(dateStr, summary.startDate, summary.endDate))
+      .sort();
+    if (datedNotes.length) return datedNotes[datedNotes.length - 1];
+    return summary.endDate || summary.startDate || "";
+  }
+
+  function summaryForDate(kind, dateStr) {
+    return filteredSummaries(kind).find((summary) => summaryAnchorDate(summary) === dateStr) || null;
+  }
+
+  function entriesForDate(dateStr) {
+    const entries = [];
+    const note = filteredNotes().find((item) => item.date === dateStr);
+    const weekly = summaryForDate("weekly", dateStr);
+    const monthly = summaryForDate("monthly", dateStr);
+
+    if (note) {
+      entries.push({
+        type: "daily",
+        label: "每日日志",
+        title: note.title,
+        meta: `${note.completedSectionCount || 0}/${note.sectionCount || 0} 已完成`,
+        note,
+      });
+    }
+
+    if (weekly) {
+      const completed = weekly.completedSectionCount || 0;
+      const total = weekly.sectionCount || 0;
+      entries.push({
+        type: "weekly",
+        label: "每周总结",
+        title: summaryRange(weekly),
+        meta: total ? `${percent(completed, total)}% 完成` : `${weekly.dailyCount || 0} 个交易日`,
+        summary: weekly,
+      });
+    }
+
+    if (monthly) {
+      const completed = monthly.completedSectionCount || 0;
+      const total = monthly.sectionCount || 0;
+      entries.push({
+        type: "monthly",
+        label: "每月总结",
+        title: summaryRange(monthly) || monthly.id,
+        meta: total ? `${percent(completed, total)}% 完成` : `${monthly.dailyCount || 0} 个交易日`,
+        summary: monthly,
+      });
+    }
+
+    return entries;
+  }
+
+  function allEntryDates() {
+    const dates = new Set();
+    filteredNotes().forEach((note) => dates.add(note.date));
+    ["weekly", "monthly"].forEach((kind) => {
+      filteredSummaries(kind).forEach((summary) => {
+        const dateStr = summaryAnchorDate(summary);
+        if (dateStr) dates.add(dateStr);
+      });
+    });
+    return Array.from(dates).sort().reverse();
+  }
+
+  function currentEntry() {
+    return entriesForDate(state.selectedDate).find((entry) => entry.type === state.selectedEntry) || null;
+  }
+
+  function normalizeSelection() {
+    let entries = entriesForDate(state.selectedDate);
+    if (!entries.length) {
+      const dates = allEntryDates();
+      state.selectedDate = dates[0] || "";
+      entries = entriesForDate(state.selectedDate);
+      if (state.selectedDate) state.currentMonth = state.selectedDate.substring(0, 7);
+    }
+
+    if (!entries.some((entry) => entry.type === state.selectedEntry)) {
+      state.selectedEntry = entries[0] ? entries[0].type : "daily";
+    }
+
+    if (state.selectedEntry !== "daily") {
+      state.visibleSection = "all";
+    }
+  }
+
+  function currentMonthParts() {
+    const [yearStr, monthStr] = state.currentMonth.split("-");
+    let year = parseInt(yearStr, 10);
+    let month = parseInt(monthStr, 10);
+    if (Number.isNaN(year) || Number.isNaN(month)) {
+      const date = new Date();
+      year = date.getFullYear();
+      month = date.getMonth() + 1;
+      state.currentMonth = `${year}-${month.toString().padStart(2, "0")}`;
+    }
+    return { year, month };
   }
 
   function renderStats() {
     const stats = data.stats || {};
-    const completed = stats.completedSectionCount || 0;
-    const total = stats.sectionCount || 0;
-    els.statNotes.textContent = stats.noteCount || 0;
-    els.statSections.textContent = `${completed}/${total}`;
-    els.statCompletion.textContent = `${percent(completed, total)}%`;
-    els.statLatest.textContent = stats.latestDate || "-";
     els.generatedAt.textContent = `已生成 ${formatGeneratedAt(data.generatedAt)}`;
+
+    const note = noteByDate(state.selectedDate) || selectedNote();
+    const completed = note ? note.completedSectionCount || 0 : 0;
+    const total = note ? note.sectionCount || 0 : 0;
+    els.statNotes.textContent = stats.noteCount || 0;
+    els.statSections.textContent = note ? `${completed}/${total}` : "0/0";
+    els.statCompletion.textContent = note ? `${percent(completed, total)}%` : "0%";
+    els.statNotesLabel.textContent = "交易日";
+    els.statSectionsLabel.textContent = "已完成";
+    els.statCompletionLabel.textContent = "完成率";
+    els.statLatest.textContent = stats.latestDate || "-";
   }
 
   function renderNoteList() {
     const notes = filteredNotes();
-    
+
     // Create quick lookup
     const notesByDate = {};
     notes.forEach((note) => {
       notesByDate[note.date] = note;
     });
 
-    const [yearStr, monthStrNum] = state.currentMonth.split("-");
-    let year = parseInt(yearStr, 10);
-    let month = parseInt(monthStrNum, 10);
-    
-    // Ensure valid year/month fallback
-    if (isNaN(year) || isNaN(month)) {
-      const d = new Date();
-      year = d.getFullYear();
-      month = d.getMonth() + 1;
-      state.currentMonth = `${year}-${month.toString().padStart(2, "0")}`;
-    }
+    const weeklyByDate = {};
+    const monthlyByDate = {};
+    filteredSummaries("weekly").forEach((summary) => {
+      const dateStr = summaryAnchorDate(summary);
+      if (dateStr) weeklyByDate[dateStr] = summary;
+    });
+    filteredSummaries("monthly").forEach((summary) => {
+      const dateStr = summaryAnchorDate(summary);
+      if (dateStr) monthlyByDate[dateStr] = summary;
+    });
+
+    const { year, month } = currentMonthParts();
 
     const monthDate = new Date(year, month - 1, 1);
     const monthName = monthDate.toLocaleString("zh-CN", { year: "numeric", month: "long" });
@@ -342,8 +499,8 @@
         </button>
       </div>`;
 
-    if (notes.length === 0) {
-      html += `<div class="empty-state" style="margin-top: 20px;">当前筛选条件下没有交易日志。</div>`;
+    if (allEntryDates().length === 0) {
+      html += `<div class="empty-state" style="margin-top: 20px;">当前搜索条件下没有交易日志或总结。</div>`;
     }
 
     html += `
@@ -360,20 +517,34 @@
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${month.toString().padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
       const note = notesByDate[dateStr];
+      const weekly = weeklyByDate[dateStr];
+      const monthly = monthlyByDate[dateStr];
+      const hasEntry = Boolean(note || weekly || monthly);
+      const markers = [];
+      if (note) markers.push('<span class="day-marker day-marker-daily" title="每日日志"></span>');
+      if (weekly) markers.push('<span class="day-marker day-marker-weekly" title="每周总结"></span>');
+      if (monthly) markers.push('<span class="day-marker day-marker-monthly" title="每月总结"></span>');
 
-      if (note) {
-        const active = note.date === state.selectedDate ? " active" : "";
-        const done = note.completedSectionCount || 0;
-        const total = note.sectionCount || 0;
-        const progress = percent(done, total);
+      if (hasEntry) {
+        const active = dateStr === state.selectedDate ? " active" : "";
+        const done = note ? note.completedSectionCount || 0 : 0;
+        const total = note ? note.sectionCount || 0 : 0;
+        const progress = note ? percent(done, total) : 0;
+        const summaryClass = `${weekly ? " has-weekly" : ""}${monthly ? " has-monthly" : ""}`;
+        const title = [
+          note ? "每日日志" : "",
+          weekly ? "每周总结" : "",
+          monthly ? "每月总结" : "",
+        ].filter(Boolean).join(" / ");
         
         let ringClass = "progress-none";
-        if (progress === 100) ringClass = "progress-full";
+        if (!note) ringClass = "progress-summary";
+        else if (progress === 100) ringClass = "progress-full";
         else if (progress > 0) ringClass = "progress-partial";
 
-        html += `<button type="button" class="calendar-day has-note ${ringClass}${active}" data-date="${escapeHtml(dateStr)}" title="${escapeHtml(note.title)}">
+        html += `<button type="button" class="calendar-day has-entry ${note ? "has-note" : "has-summary"} ${ringClass}${summaryClass}${active}" data-date="${escapeHtml(dateStr)}" title="${escapeHtml(title)}">
           <span class="day-number">${d}</span>
-          <span class="day-indicator"></span>
+          <span class="day-markers">${markers.join("")}</span>
         </button>`;
       } else {
         const isToday = today.getFullYear() === year && (today.getMonth() + 1) === month && today.getDate() === d;
@@ -383,7 +554,35 @@
     }
 
     html += `</div></div>`;
+    html += renderEntrySwitcher();
     els.notes.innerHTML = html;
+  }
+
+  function renderEntrySwitcher() {
+    const entries = entriesForDate(state.selectedDate);
+    if (!state.selectedDate) {
+      return '<div class="entry-switcher empty-state">没有找到可查看的日志或总结。</div>';
+    }
+    if (!entries.length) {
+      return `<div class="entry-switcher empty-state">${escapeHtml(state.selectedDate)} 没有可查看的日志或总结。</div>`;
+    }
+
+    return `<div class="entry-switcher" aria-label="Selected date entries">
+      <div class="entry-switcher-header">
+        <span>${escapeHtml(state.selectedDate)}</span>
+        <strong>可查看内容</strong>
+      </div>
+      <div class="entry-options">
+        ${entries.map((entry) => {
+          const active = entry.type === state.selectedEntry ? " active" : "";
+          return `<button type="button" class="${active}" data-entry="${escapeHtml(entry.type)}">
+            <span class="entry-kind">${escapeHtml(entry.label)}</span>
+            <strong>${escapeHtml(entry.title || entry.label)}</strong>
+            <span class="entry-meta">${escapeHtml(entry.meta || "")}</span>
+          </button>`;
+        }).join("")}
+      </div>
+    </div>`;
   }
 
   function renderSectionTabs(note) {
@@ -403,8 +602,35 @@
       .join("");
   }
 
-  function renderContent() {
-    const note = selectedNote();
+  function renderSummaryContent(entry) {
+    const summary = entry && entry.summary;
+    const summaryLabel = entry && entry.type === "weekly" ? "周总结" : "月总结";
+    els.sectionTabs.innerHTML = "";
+
+    if (!summary) {
+      els.selectedDate.textContent = "";
+      els.selectedTitle.textContent = `没有${summaryLabel}`;
+      els.selectedModel.textContent = "";
+      els.selectedScores.textContent = "";
+      els.selectedProgress.textContent = "0";
+      els.selectedUpdated.textContent = "-";
+      els.content.innerHTML = '<div class="empty-state">没有找到总结数据。</div>';
+      return;
+    }
+
+    const completed = summary.completedSectionCount || 0;
+    const total = summary.sectionCount || 0;
+    els.selectedDate.textContent = summaryRange(summary);
+    els.selectedTitle.textContent = summary.title || summary.id;
+    els.selectedModel.textContent = summary.model ? `模型 ${summary.model}` : "模型未知";
+    els.selectedScores.textContent = total ? `${percent(completed, total)}% 完成` : "";
+    els.selectedProgress.textContent = `${summary.dailyCount || 0} 个交易日`;
+    els.selectedUpdated.textContent = formatGeneratedAt(summary.generatedAt || data.generatedAt);
+    const body = String(summary.rawMarkdown || "").replace(/^#\s+.+?(?:\r?\n){1,2}/, "");
+    els.content.innerHTML = `<section class="section-block periodic-summary">${renderMarkdown(body)}</section>`;
+  }
+
+  function renderDailyContent(note) {
     if (!note) {
       els.selectedDate.textContent = "";
       els.selectedTitle.textContent = "没有日志";
@@ -456,35 +682,66 @@
       .join("");
   }
 
+  function renderContent() {
+    const entry = currentEntry();
+    if (!entry) {
+      els.selectedDate.textContent = state.selectedDate || "";
+      els.selectedTitle.textContent = "没有内容";
+      els.selectedModel.textContent = "";
+      els.selectedScores.textContent = "";
+      els.selectedProgress.textContent = "0";
+      els.selectedUpdated.textContent = "-";
+      els.sectionTabs.innerHTML = "";
+      els.content.innerHTML = '<div class="empty-state">没有找到可查看的日志或总结。</div>';
+      return;
+    }
+
+    if (entry.type === "daily") {
+      renderDailyContent(entry.note);
+      return;
+    }
+
+    renderSummaryContent(entry);
+  }
+
+  function scrollToContentStart() {
+    const firstBlock = els.content ? els.content.querySelector(".section-block") : null;
+    const target = firstBlock || els.content;
+    if (!target) return;
+    const topbar = document.querySelector(".topbar");
+    const sectionTabs = els.sectionTabs;
+    const offset = (topbar ? topbar.offsetHeight : 0) + (sectionTabs ? sectionTabs.offsetHeight : 0) + 18;
+    const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - offset);
+    window.scrollTo({ top, left: window.scrollX });
+  }
+
   function render() {
+    normalizeSelection();
+    document.documentElement.dataset.view = state.selectedEntry;
     renderStats();
     renderContent();
     renderNoteList();
   }
 
-  document.querySelectorAll(".filter-tabs button").forEach((button) => {
-    button.addEventListener("click", () => {
-      document.querySelectorAll(".filter-tabs button").forEach((item) => item.classList.remove("active"));
-      button.classList.add("active");
-      state.filter = button.dataset.filter || "all";
-      const notes = filteredNotes();
-      state.selectedDate = notes[0] ? notes[0].date : "";
-      if (notes[0]) state.currentMonth = notes[0].date.substring(0, 7);
-      state.visibleSection = "all";
-      render();
-    });
-  });
-
   els.search.addEventListener("input", () => {
     state.query = els.search.value;
-    const notes = filteredNotes();
-    state.selectedDate = notes[0] ? notes[0].date : "";
-    if (notes[0]) state.currentMonth = notes[0].date.substring(0, 7);
+    const dates = allEntryDates();
+    state.selectedDate = dates[0] || "";
+    state.selectedEntry = "daily";
+    if (state.selectedDate) state.currentMonth = state.selectedDate.substring(0, 7);
     state.visibleSection = "all";
     render();
   });
 
   els.notes.addEventListener("click", (event) => {
+    const entryButton = event.target.closest(".entry-options button");
+    if (entryButton) {
+      state.selectedEntry = entryButton.dataset.entry || "daily";
+      state.visibleSection = "all";
+      render();
+      return;
+    }
+
     // Handle month navigation
     const prevBtn = event.target.closest(".prev-month");
     const nextBtn = event.target.closest(".next-month");
@@ -501,9 +758,13 @@
     }
 
     // Handle date selection
-    const button = event.target.closest(".calendar-day.has-note");
+    const button = event.target.closest(".calendar-day.has-entry");
     if (!button) return;
     state.selectedDate = button.dataset.date;
+    const entries = entriesForDate(state.selectedDate);
+    if (!entries.some((entry) => entry.type === state.selectedEntry)) {
+      state.selectedEntry = entries[0] ? entries[0].type : "daily";
+    }
     state.visibleSection = "all";
     render();
   });
@@ -511,8 +772,11 @@
   els.sectionTabs.addEventListener("click", (event) => {
     const button = event.target.closest("button");
     if (!button) return;
-    state.visibleSection = button.dataset.section || "all";
-    render();
+    const nextSection = button.dataset.section || "all";
+    if (nextSection === state.visibleSection) return;
+    state.visibleSection = nextSection;
+    renderContent();
+    window.requestAnimationFrame(scrollToContentStart);
   });
 
   if (els.themeToggle) {

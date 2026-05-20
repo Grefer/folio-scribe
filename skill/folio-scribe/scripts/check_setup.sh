@@ -194,6 +194,16 @@ else
     fail "build_web_journal.py not found"
 fi
 
+if [ -x "$SCRIPT_DIR/sync_tradingweb.sh" ]; then
+    if "$SCRIPT_DIR/sync_tradingweb.sh" --help &>/dev/null; then
+        pass "sync_tradingweb.sh runnable"
+    else
+        fail "sync_tradingweb.sh help error"
+    fi
+else
+    warn "sync_tradingweb.sh not executable (needed for automated web sync)"
+fi
+
 if [ -x "$SCRIPT_DIR/deploy_web_journal_vercel.sh" ]; then
     if "$SCRIPT_DIR/deploy_web_journal_vercel.sh" --help &>/dev/null; then
         pass "deploy_web_journal_vercel.sh runnable"

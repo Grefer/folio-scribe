@@ -37,7 +37,7 @@
               </svg>
             </span>
             <span id="stat-notes" class="stat-value">0</span>
-            <small>交易日</small>
+            <small id="stat-notes-label">交易日</small>
           </div>
           <div class="stat-card">
             <span class="stat-icon" aria-hidden="true">
@@ -46,7 +46,7 @@
               </svg>
             </span>
             <span id="stat-sections" class="stat-value">0/0</span>
-            <small>已完成</small>
+            <small id="stat-sections-label">已完成</small>
           </div>
           <div class="stat-card">
             <span class="stat-icon" aria-hidden="true">
@@ -57,7 +57,7 @@
               </svg>
             </span>
             <span id="stat-completion" class="stat-value">0%</span>
-            <small>完成率</small>
+            <small id="stat-completion-label">完成率</small>
           </div>
         </section>
         <div class="theme-switch">
@@ -105,15 +105,7 @@
           <input id="search-input" type="search" placeholder="搜索日期、标的、模型" autocomplete="off">
         </div>
 
-        <nav class="filter-tabs" aria-label="Section filters">
-          <button type="button" data-filter="all" class="active">全部</button>
-          <button type="button" data-filter="hk_plan">港股计划</button>
-          <button type="button" data-filter="hk_review">港股总结</button>
-          <button type="button" data-filter="us_plan">美股计划</button>
-          <button type="button" data-filter="us_review">美股总结</button>
-        </nav>
-
-        <div id="note-list" class="calendar-list" aria-label="Daily notes"></div>
+        <div id="note-list" class="calendar-list" aria-label="Journal calendar"></div>
       </aside>
 
       <main class="journal-view">

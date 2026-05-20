@@ -16,7 +16,14 @@ class FutuSnapshotCliTests(unittest.TestCase):
             positions=[Position(symbol="US.AAPL", quantity=Decimal("2"), raw={"source": "futu"})],
             orders=[Order(symbol="US.AAPL", quantity=Decimal("1"), raw={"source": "futu"})],
             fills=[Fill(symbol="US.AAPL", price=Decimal("180.25"), raw={"source": "futu"})],
-            quotes={"US.AAPL": Quote(symbol="US.AAPL", price=Decimal("181.10"), raw={"source": "futu"})},
+            quotes={
+                "US.AAPL": Quote(
+                    symbol="US.AAPL",
+                    name="Apple",
+                    price=Decimal("181.10"),
+                    raw={"source": "futu"},
+                )
+            },
             raw={"trading_status": "ok", "host": "127.0.0.1"},
         )
 
@@ -24,6 +31,7 @@ class FutuSnapshotCliTests(unittest.TestCase):
 
         self.assertEqual(payload["account"]["total_assets"], "1000.50")
         self.assertEqual(payload["positions"][0]["symbol"], "US.AAPL")
+        self.assertEqual(payload["quotes"]["US.AAPL"]["name"], "Apple")
         self.assertNotIn("raw", payload["account"])
         self.assertEqual(payload["raw"], {"trading_status": "ok"})
 

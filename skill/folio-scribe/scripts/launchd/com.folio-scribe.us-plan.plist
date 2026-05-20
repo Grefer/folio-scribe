@@ -12,9 +12,9 @@
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>20</integer>
+        <integer>__US_PLAN_HOUR__</integer>
         <key>Minute</key>
-        <integer>45</integer>
+        <integer>__US_PLAN_MINUTE__</integer>
     </dict>
     <key>StandardOutPath</key>
     <string>__LOG_DIR__/launchd-us-plan.out</string>
@@ -28,10 +28,16 @@
         <string>__HOME__</string>
         <key>FOLIO_SCRIBE_AI_CLI</key>
         <string>__AI_CLI__</string>
+        <key>FOLIO_SCRIBE_AI_FALLBACK_CLI</key>
+        <string>__AI_FALLBACK_CLI__</string>
         <key>FOLIO_SCRIBE_AI_MODEL</key>
         <string>__AI_MODEL__</string>
+        <key>FOLIO_SCRIBE_PLAN_PHASE</key>
+        <string>final</string>
         <key>FOLIO_SCRIBE_WEB_EXPORT_DIR</key>
         <string>__WEB_EXPORT_DIR__</string>
+        <key>FOLIO_SCRIBE_WEB_TITLE</key>
+        <string>__WEB_TITLE__</string>
         <key>FOLIO_SCRIBE_WEB_DEPLOY</key>
         <string>__WEB_DEPLOY__</string>
         <key>FOLIO_SCRIBE_VERCEL_PROJECT</key>
