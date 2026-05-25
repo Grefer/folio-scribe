@@ -39,7 +39,21 @@ def load_build_web_journal_module() -> Any:
     return module
 
 
+def load_market_calendar_module() -> Any:
+    import importlib.util
+
+    script = SCRIPT_DIR / "market_calendar.py"
+    spec = importlib.util.spec_from_file_location("market_calendar", script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {script}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["market_calendar"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 build_web_journal = load_build_web_journal_module()
+market_calendar = load_market_calendar_module()
 
 
 def parse_date(value: str) -> dt.date:
@@ -61,7 +75,7 @@ def month_range(year: int, month: int) -> tuple[dt.date, dt.date]:
 
 def last_trading_day_of_month(year: int, month: int) -> dt.date:
     day = month_range(year, month)[1]
-    while day.weekday() >= 5:
+    while not market_calendar.market_status("HK", day).open:
         day -= dt.timedelta(days=1)
     return day
 
@@ -542,30 +556,46 @@ def run_codex(prompt: str, content_path: Path, vault: Path, model: str, explicit
     return f"codex:{model}" if model else "codex"
 
 
+def resolve_fallback_cli(primary: str, fallback: str) -> str:
+    if fallback in {"", "none"}:
+        return ""
+    if fallback == "auto":
+        return "claude" if primary == "codex" else "codex"
+    if fallback == primary:
+        return ""
+    return fallback
+
+
 def generate_with_ai(prompt: str, vault: Path) -> tuple[str, str]:
     primary = os.environ.get("FOLIO_SCRIBE_AI_CLI", "codex").lower()
-    fallback = os.environ.get("FOLIO_SCRIBE_AI_FALLBACK_CLI", "codex").lower()
+    fallback = os.environ.get("FOLIO_SCRIBE_AI_FALLBACK_CLI", "auto").lower()
     if primary not in {"claude", "codex"}:
         raise ValueError("FOLIO_SCRIBE_AI_CLI must be claude or codex")
-    if fallback not in {"", "none", "codex"}:
-        raise ValueError("FOLIO_SCRIBE_AI_FALLBACK_CLI must be codex or none")
+    if fallback not in {"", "none", "auto", "claude", "codex"}:
+        raise ValueError("FOLIO_SCRIBE_AI_FALLBACK_CLI must be auto, claude, codex, or none")
 
     content_path = Path(tempfile.mkstemp(prefix="folio-periodic-summary-", suffix=".md")[1])
     initial_label, model, explicit = resolve_initial_model_label(primary)
+    fallback_cli = resolve_fallback_cli(primary, fallback)
 
     try:
         if primary == "claude":
-            try:
-                label = run_claude(prompt, content_path, initial_label, model, explicit)
-            except Exception as exc:
-                if fallback == "codex":
-                    print(f"WARNING: Claude failed; falling back to Codex: {exc}", file=sys.stderr)
-                    _, codex_model, codex_explicit = resolve_initial_model_label("codex")
-                    label = run_codex(prompt, content_path, vault, codex_model, codex_explicit)
-                else:
-                    raise
+            primary_runner = lambda: run_claude(prompt, content_path, initial_label, model, explicit)
         else:
-            label = run_codex(prompt, content_path, vault, model, explicit)
+            primary_runner = lambda: run_codex(prompt, content_path, vault, model, explicit)
+
+        try:
+            label = primary_runner()
+        except Exception as exc:
+            if not fallback_cli:
+                raise
+            print(f"WARNING: {primary} failed; falling back to {fallback_cli}: {exc}", file=sys.stderr)
+            content_path.write_text("", encoding="utf-8")
+            fallback_label, fallback_model, fallback_explicit = resolve_initial_model_label(fallback_cli)
+            if fallback_cli == "claude":
+                label = run_claude(prompt, content_path, fallback_label, fallback_model, fallback_explicit)
+            else:
+                label = run_codex(prompt, content_path, vault, fallback_model, fallback_explicit)
 
         content = content_path.read_text(encoding="utf-8", errors="replace").strip()
         return content, label

@@ -30,7 +30,7 @@ VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # parent of scripts/
 AI_CLI="${FOLIO_SCRIBE_AI_CLI:-codex}"
 AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
-AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-codex}"
+AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-auto}"
 AI_MODEL="${FOLIO_SCRIBE_AI_MODEL:-}"
 WEB_EXPORT_DIR="${FOLIO_SCRIBE_WEB_EXPORT_DIR:-}"
 WEB_TITLE="${FOLIO_SCRIBE_WEB_TITLE:-Folio Scribe Journal}"
@@ -73,7 +73,8 @@ Environment:
   FOLIO_SCRIBE_VAULT      Alternative to --vault flag
   FOLIO_SCRIBE_AI_CLI     AI CLI for scheduled generation (codex or claude; default: codex)
   FOLIO_SCRIBE_AI_FALLBACK_CLI
-                          Fallback CLI when Claude fails (codex or none; default: codex)
+                          Fallback CLI when the primary CLI fails
+                          (auto, claude, codex, or none; default: auto)
   FOLIO_SCRIBE_AI_MODEL   Optional model override for the selected AI CLI
   FOLIO_SCRIBE_WEB_EXPORT_DIR
                           Optional static web dashboard output directory
@@ -273,9 +274,7 @@ do_install() {
     echo "  Vault:     $VAULT"
     echo "  Skill dir: $SKILL_DIR"
     echo "  AI CLI:    $AI_CLI"
-    if [ "$AI_CLI" = "claude" ]; then
-        echo "  Fallback:  $AI_FALLBACK_CLI"
-    fi
+    echo "  Fallback:  $AI_FALLBACK_CLI"
     if [ -n "$AI_MODEL" ]; then
         echo "  AI model:  $AI_MODEL"
     fi
@@ -308,8 +307,8 @@ do_install() {
         *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_CLI '$AI_CLI'. Use: claude|codex"; exit 1 ;;
     esac
     case "$(printf '%s' "$AI_FALLBACK_CLI" | tr '[:upper:]' '[:lower:]')" in
-        ""|none|codex) ;;
-        *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_FALLBACK_CLI '$AI_FALLBACK_CLI'. Use: codex|none"; exit 1 ;;
+        ""|none|auto|claude|codex) ;;
+        *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_FALLBACK_CLI '$AI_FALLBACK_CLI'. Use: auto|claude|codex|none"; exit 1 ;;
     esac
     case "$WEB_DEPLOY" in
         ""|vercel) ;;

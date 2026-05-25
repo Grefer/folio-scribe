@@ -174,6 +174,32 @@ class SkillBundlePortabilityTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Generate Weekly/Monthly", result.stdout)
 
+    def test_copied_bundle_market_calendar_runs_without_repo_package(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            copied_skill = tmp_path / "folio-scribe"
+            shutil.copytree(SKILL_DIR, copied_skill)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(copied_skill / "scripts" / "market_calendar.py"),
+                    "is-open",
+                    "--market",
+                    "HK",
+                    "--date",
+                    "2026-05-25",
+                ],
+                cwd=tmp_path,
+                env=_clean_env(),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("closed", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

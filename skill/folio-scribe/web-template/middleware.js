@@ -46,7 +46,7 @@ function sameValue(left, right) {
 }
 
 export default function middleware(request) {
-  const expectedUser = process.env.FOLIO_SCRIBE_WEB_USER || "grefer";
+  const expectedUser = process.env.FOLIO_SCRIBE_WEB_USER || "folio";
   const expectedPassword = process.env.FOLIO_SCRIBE_WEB_PASSWORD || "";
 
   if (!expectedPassword) {

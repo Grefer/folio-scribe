@@ -32,7 +32,7 @@ OPEND_APP="${FOLIO_SCRIBE_OPEND_APP:-$HOME/Applications/Futu_OpenD/FutuOpenD.app
 OPEND_PORT="${FOLIO_SCRIBE_OPEND_PORT:-11111}"
 AI_CLI="${FOLIO_SCRIBE_AI_CLI:-codex}"
 AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
-AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-codex}"
+AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-auto}"
 AI_FALLBACK_CLI=$(printf '%s' "$AI_FALLBACK_CLI" | tr '[:upper:]' '[:lower:]')
 CLAUDE="${FOLIO_SCRIBE_CLAUDE:-$(command -v claude 2>/dev/null || echo /opt/homebrew/bin/claude)}"
 CLAUDE_SETTINGS="${FOLIO_SCRIBE_CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
@@ -53,6 +53,8 @@ HK_WATCHLIST_SYMBOLS="${FOLIO_SCRIBE_HK_WATCHLIST:-}"
 US_WATCHLIST_SYMBOLS="${FOLIO_SCRIBE_US_WATCHLIST:-}"
 PLAN_PHASE="${FOLIO_SCRIBE_PLAN_PHASE:-}"
 PLAN_PHASE=$(printf '%s' "$PLAN_PHASE" | tr '[:upper:]' '[:lower:]')
+ALLOW_NON_TRADING_DAY="${FOLIO_SCRIBE_ALLOW_NON_TRADING_DAY:-0}"
+ALLOW_NON_TRADING_DAY=$(printf '%s' "$ALLOW_NON_TRADING_DAY" | tr '[:upper:]' '[:lower:]')
 LANG_PREF="${FOLIO_SCRIBE_LANG:-zh}"   # zh | en
 LOG_DIR="$VAULT/.logs"
 MAX_OPEND_WAIT=90
@@ -105,8 +107,8 @@ except Exception:
 esac
 
 case "$AI_FALLBACK_CLI" in
-    ""|none|codex) ;;
-    *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_FALLBACK_CLI '$AI_FALLBACK_CLI'. Use: codex|none"; exit 1 ;;
+    ""|none|auto|claude|codex) ;;
+    *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_FALLBACK_CLI '$AI_FALLBACK_CLI'. Use: auto|claude|codex|none"; exit 1 ;;
 esac
 
 case "$CLAUDE_BARE" in
@@ -177,6 +179,12 @@ case "$PLAN_PHASE" in
     *) echo "ERROR: Invalid FOLIO_SCRIBE_PLAN_PHASE '$PLAN_PHASE'. Use: early|final"; exit 1 ;;
 esac
 
+case "$ALLOW_NON_TRADING_DAY" in
+    0|false|no|off|"") ;;
+    1|true|yes|on) ;;
+    *) echo "ERROR: Invalid FOLIO_SCRIBE_ALLOW_NON_TRADING_DAY '$ALLOW_NON_TRADING_DAY'. Use: 0|1"; exit 1 ;;
+esac
+
 infer_us_plan_phase() {
     local hour minute total
     if [ "$TASK_TYPE" != "us_plan" ]; then
@@ -211,24 +219,61 @@ echo "================================================================"
 echo "  $(date '+%Y-%m-%d %H:%M:%S') | folio-scribe | $TASK_TYPE"
 echo "================================================================"
 
-# ── Session-aware weekend guard ──────────────────────────────────────
-DOW=$(date +%u)   # 1=Mon … 7=Sun
+# ── Determine note/session date ─────────────────────────────────────
 case "$TASK_TYPE" in
     us_review)
-        # In Asia time zones, the US Friday close review runs on local Saturday
-        # morning. Local Monday morning maps to a Sunday US session, so skip it.
-        if [ "$DOW" -eq 7 ] || [ "$DOW" -eq 1 ]; then
-            echo "No completed US regular session for local day $DOW, skipping."
-            exit 0
-        fi
+        # 06:45 AM review covers the US session that started the previous evening.
+        NOTE_DATE=$(date -v-1d +%Y-%m-%d)
         ;;
     *)
-        if [ "$DOW" -gt 5 ]; then
-            echo "Weekend (day $DOW), skipping."
-            exit 0
-        fi
+        NOTE_DATE=$(date +%Y-%m-%d)
         ;;
 esac
+if [ -n "$NOTE_DATE_OVERRIDE" ]; then
+    case "$NOTE_DATE_OVERRIDE" in
+        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+        *) echo "ERROR: FOLIO_SCRIBE_NOTE_DATE must be YYYY-MM-DD, got '$NOTE_DATE_OVERRIDE'"; exit 1 ;;
+    esac
+    if ! date -j -f "%Y-%m-%d" "$NOTE_DATE_OVERRIDE" +%Y-%m-%d >/dev/null 2>&1; then
+        echo "ERROR: FOLIO_SCRIBE_NOTE_DATE is not a valid date: '$NOTE_DATE_OVERRIDE'"
+        exit 1
+    fi
+    NOTE_DATE="$NOTE_DATE_OVERRIDE"
+    echo "Note date override: $NOTE_DATE"
+fi
+echo "Note date: $NOTE_DATE"
+
+# ── Market calendar guard ───────────────────────────────────────────
+case "$TASK_TYPE" in
+    hk_*) MARKET_CALENDAR="HK" ;;
+    us_*) MARKET_CALENDAR="US" ;;
+esac
+
+if [ ! -f "$SCRIPT_DIR/market_calendar.py" ]; then
+    echo "ERROR: market_calendar.py not found in $SCRIPT_DIR"
+    exit 1
+fi
+
+set +e
+MARKET_STATUS=$(python3 "$SCRIPT_DIR/market_calendar.py" is-open --market "$MARKET_CALENDAR" --date "$NOTE_DATE" 2>&1)
+MARKET_STATUS_CODE=$?
+set -e
+echo "$MARKET_STATUS"
+if [ "$MARKET_STATUS_CODE" -ne 0 ]; then
+    if [ "$MARKET_STATUS_CODE" -ne 1 ]; then
+        echo "ERROR: Market calendar check failed for $MARKET_CALENDAR $NOTE_DATE."
+        exit 1
+    fi
+    case "$ALLOW_NON_TRADING_DAY" in
+        1|true|yes|on)
+            echo "FOLIO_SCRIBE_ALLOW_NON_TRADING_DAY is enabled; continuing despite closed market."
+            ;;
+        *)
+            echo "No $MARKET_CALENDAR trading session for $NOTE_DATE, skipping $TASK_TYPE."
+            exit 0
+            ;;
+    esac
+fi
 
 # ── Ensure Futu OpenD is running ─────────────────────────────────────
 ensure_opend() {
@@ -257,30 +302,6 @@ if ! ensure_opend; then
     echo "FATAL: Cannot reach Futu OpenD. Aborting."
     exit 1
 fi
-
-# ── Determine note date ──────────────────────────────────────────────
-case "$TASK_TYPE" in
-    us_review)
-        # 06:45 AM review covers the US session that started the previous evening
-        NOTE_DATE=$(date -v-1d +%Y-%m-%d)
-        ;;
-    *)
-        NOTE_DATE=$(date +%Y-%m-%d)
-        ;;
-esac
-if [ -n "$NOTE_DATE_OVERRIDE" ]; then
-    case "$NOTE_DATE_OVERRIDE" in
-        [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
-        *) echo "ERROR: FOLIO_SCRIBE_NOTE_DATE must be YYYY-MM-DD, got '$NOTE_DATE_OVERRIDE'"; exit 1 ;;
-    esac
-    if ! date -j -f "%Y-%m-%d" "$NOTE_DATE_OVERRIDE" +%Y-%m-%d >/dev/null 2>&1; then
-        echo "ERROR: FOLIO_SCRIBE_NOTE_DATE is not a valid date: '$NOTE_DATE_OVERRIDE'"
-        exit 1
-    fi
-    NOTE_DATE="$NOTE_DATE_OVERRIDE"
-    echo "Note date override: $NOTE_DATE"
-fi
-echo "Note date: $NOTE_DATE"
 
 case "$TASK_TYPE" in
     hk_plan)   NOTE_SECTION="$SEC_HK_PLAN" ;;
@@ -1417,8 +1438,50 @@ except Exception:
     fi
 }
 
+configured_claude_model() {
+    if [ -n "${FOLIO_SCRIBE_CLAUDE_MODEL:-}" ]; then
+        printf '%s' "$FOLIO_SCRIBE_CLAUDE_MODEL"
+        return 0
+    fi
+    if [ -r "$CLAUDE_SETTINGS" ]; then
+        python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("model", ""))' "$CLAUDE_SETTINGS" 2>/dev/null || true
+    fi
+}
+
+resolved_fallback_cli() {
+    case "$AI_FALLBACK_CLI" in
+        ""|none)
+            printf ''
+            ;;
+        auto)
+            if [ "$AI_CLI" = "codex" ]; then
+                printf 'claude'
+            else
+                printf 'codex'
+            fi
+            ;;
+        claude|codex)
+            if [ "$AI_FALLBACK_CLI" != "$AI_CLI" ]; then
+                printf '%s' "$AI_FALLBACK_CLI"
+            fi
+            ;;
+    esac
+}
+
 run_claude_cli() {
     echo "Calling Claude text-only (tools disabled) ..."
+
+    local claude_model claude_model_explicit
+    claude_model_explicit=0
+    if [ "$AI_CLI" = "claude" ]; then
+        claude_model="$AI_MODEL"
+        claude_model_explicit="$AI_MODEL_EXPLICIT"
+    else
+        claude_model=$(configured_claude_model)
+        if [ -n "${FOLIO_SCRIBE_CLAUDE_MODEL:-}" ]; then
+            claude_model_explicit=1
+        fi
+    fi
 
     local args=(
         -p "$PROMPT"
@@ -1438,11 +1501,16 @@ run_claude_cli() {
         args+=(--settings "$CLAUDE_SETTINGS")
         echo "Claude Code settings: $CLAUDE_SETTINGS"
     fi
-    if [ -n "$AI_MODEL" ] && [ "$AI_MODEL_EXPLICIT" -eq 1 ]; then
-        args+=(--model "$AI_MODEL")
-        echo "Claude Code model: $AI_MODEL"
-    elif [ -n "$AI_MODEL" ]; then
-        echo "Claude Code configured model: $AI_MODEL"
+    if [ -n "$claude_model" ] && [ "$claude_model_explicit" -eq 1 ]; then
+        args+=(--model "$claude_model")
+        echo "Claude Code model: $claude_model"
+    elif [ -n "$claude_model" ]; then
+        echo "Claude Code configured model: $claude_model"
+    fi
+    if [ -n "$claude_model" ]; then
+        AI_MODEL_LABEL="claude:$claude_model"
+    else
+        AI_MODEL_LABEL="claude"
     fi
     if [ -n "$CLAUDE_FALLBACK_MODEL" ]; then
         args+=(--fallback-model "$CLAUDE_FALLBACK_MODEL")
@@ -1509,7 +1577,7 @@ PY
     local raw_model_label resolved_model_label
     raw_model_label="$AI_MODEL_LABEL"
     resolved_model_label=$(python3 "$SCRIPT_DIR/resolve_model_label.py" \
-        --cli "$AI_CLI" \
+        --cli "claude" \
         --label "$AI_MODEL_LABEL" \
         --claude-json "$claude_json" \
         --cc-switch-db "$CC_SWITCH_DB" 2>/dev/null || true)
@@ -1595,34 +1663,33 @@ run_codex_cli() {
     return 0
 }
 
+run_selected_ai_cli() {
+    local cli="$1"
+    case "$cli" in
+        claude) run_claude_cli ;;
+        codex) run_codex_cli ;;
+        *) echo "ERROR: Unsupported AI CLI '$cli'"; return 1 ;;
+    esac
+}
+
 echo "AI CLI: $AI_CLI"
-case "$AI_CLI" in
-    claude)
-        if run_claude_cli; then
-            :
-        else
-            claude_status=$?
-            if [ "$AI_FALLBACK_CLI" = "codex" ]; then
-                echo "WARNING: Claude failed; falling back to Codex CLI for this run."
-                : > "$AI_CONTENT_FILE"
-                if run_codex_cli; then
-                    :
-                else
-                    exit 1
-                fi
-            else
-                exit "$claude_status"
-            fi
-        fi
-        ;;
-    codex)
-        if run_codex_cli; then
+if run_selected_ai_cli "$AI_CLI"; then
+    :
+else
+    primary_status=$?
+    FALLBACK_CLI=$(resolved_fallback_cli)
+    if [ -n "$FALLBACK_CLI" ]; then
+        echo "WARNING: ${AI_CLI} failed; falling back to ${FALLBACK_CLI} CLI for this run."
+        : > "$AI_CONTENT_FILE"
+        if run_selected_ai_cli "$FALLBACK_CLI"; then
             :
         else
             exit 1
         fi
-        ;;
-esac
+    else
+        exit "$primary_status"
+    fi
+fi
 
 if [ ! -s "$AI_CONTENT_FILE" ]; then
     echo "ERROR: AI CLI produced an empty section."
