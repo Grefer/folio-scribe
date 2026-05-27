@@ -43,6 +43,14 @@ class MarketCalendarTests(unittest.TestCase):
         self.assertTrue(self.calendar.market_status("HK", date).open)
         self.assertTrue(self.calendar.market_status("US", date).open)
 
+    def test_2027_hk_holidays_are_bundled(self) -> None:
+        closed = self.calendar.market_status("HK", dt.date(2027, 2, 8))
+        open_day = self.calendar.market_status("HK", dt.date(2027, 2, 10))
+
+        self.assertFalse(closed.open)
+        self.assertIn("Lunar New Year", closed.reason)
+        self.assertTrue(open_day.open)
+
     def test_cli_returns_non_zero_for_closed_market(self) -> None:
         result = subprocess.run(
             [

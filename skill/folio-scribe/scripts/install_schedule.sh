@@ -32,11 +32,13 @@ AI_CLI="${FOLIO_SCRIBE_AI_CLI:-codex}"
 AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
 AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-auto}"
 AI_MODEL="${FOLIO_SCRIBE_AI_MODEL:-}"
+AI_TIMEOUT_SECONDS="${FOLIO_SCRIBE_AI_TIMEOUT_SECONDS:-300}"
 WEB_EXPORT_DIR="${FOLIO_SCRIBE_WEB_EXPORT_DIR:-}"
 WEB_TITLE="${FOLIO_SCRIBE_WEB_TITLE:-Folio Scribe Journal}"
 WEB_DEPLOY="${FOLIO_SCRIBE_WEB_DEPLOY:-}"
 WEB_WATCH="${FOLIO_SCRIBE_WEB_WATCH:-}"
 WEB_SYNC_DEBOUNCE="${FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE:-8}"
+LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$HOME/Library/Logs/folio-scribe}"
 VERCEL_PROJECT="${FOLIO_SCRIBE_VERCEL_PROJECT:-}"
 VERCEL_SCOPE="${FOLIO_SCRIBE_VERCEL_SCOPE:-}"
 VERCEL_TARGET="${FOLIO_SCRIBE_VERCEL_TARGET:-}"
@@ -76,6 +78,11 @@ Environment:
                           Fallback CLI when the primary CLI fails
                           (auto, claude, codex, or none; default: auto)
   FOLIO_SCRIBE_AI_MODEL   Optional model override for the selected AI CLI
+  FOLIO_SCRIBE_AI_TIMEOUT_SECONDS
+                          Wall-clock timeout for each AI CLI call
+                          (default: 300; 0 disables)
+  FOLIO_SCRIBE_LOG_DIR    launchd and runner log directory
+                          (default: ~/Library/Logs/folio-scribe)
   FOLIO_SCRIBE_WEB_EXPORT_DIR
                           Optional static web dashboard output directory
   FOLIO_SCRIBE_WEB_TITLE  Static web dashboard title
@@ -213,6 +220,7 @@ install_plist() {
         -e "s|__AI_CLI__|${AI_CLI}|g" \
         -e "s|__AI_FALLBACK_CLI__|${AI_FALLBACK_CLI}|g" \
         -e "s|__AI_MODEL__|${AI_MODEL}|g" \
+        -e "s|__AI_TIMEOUT_SECONDS__|${AI_TIMEOUT_SECONDS}|g" \
         -e "s|__WEB_EXPORT_DIR__|${WEB_EXPORT_DIR}|g" \
         -e "s|__WEB_TITLE__|${WEB_TITLE}|g" \
         -e "s|__WEB_DEPLOY__|${WEB_DEPLOY}|g" \
@@ -222,7 +230,7 @@ install_plist() {
         -e "s|__VERCEL_TARGET__|${VERCEL_TARGET}|g" \
         -e "s|__VERCEL_DOMAIN__|${VERCEL_DOMAIN}|g" \
         -e "s|__HK_PLAN_HOUR__|${HK_PLAN_HOUR:-8}|g" \
-        -e "s|__HK_PLAN_MINUTE__|${HK_PLAN_MINUTE:-45}|g" \
+        -e "s|__HK_PLAN_MINUTE__|${HK_PLAN_MINUTE:-15}|g" \
         -e "s|__HK_REVIEW_HOUR__|${HK_REVIEW_HOUR:-16}|g" \
         -e "s|__HK_REVIEW_MINUTE__|${HK_REVIEW_MINUTE:-15}|g" \
         -e "s|__US_PLAN_EARLY_HOUR__|${US_PLAN_EARLY_HOUR:-16}|g" \
@@ -296,7 +304,7 @@ do_install() {
     printf '    %02d:%02d  us_review\n' "$US_REVIEW_HOUR" "$US_REVIEW_MINUTE"
     printf '    %02d:%02d  weekly_summary (Saturday)\n' "$WEEKLY_SUMMARY_HOUR" "$WEEKLY_SUMMARY_MINUTE"
     printf '    %02d:%02d  monthly_summary (day 1)\n' "$MONTHLY_SUMMARY_HOUR" "$MONTHLY_SUMMARY_MINUTE"
-    echo "  Log dir:   $VAULT/.logs"
+    echo "  Log dir:   $LOG_DIR"
     echo ""
 
     # Validate
@@ -316,6 +324,9 @@ do_install() {
     esac
     case "$WEB_SYNC_DEBOUNCE" in
         ""|*[!0-9]*) echo "ERROR: FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE must be a non-negative integer"; exit 1 ;;
+    esac
+    case "$AI_TIMEOUT_SECONDS" in
+        ""|*[!0-9]*) echo "ERROR: FOLIO_SCRIBE_AI_TIMEOUT_SECONDS must be a non-negative integer"; exit 1 ;;
     esac
     if web_watch_enabled && [ -z "$WEB_EXPORT_DIR" ]; then
         echo "ERROR: FOLIO_SCRIBE_WEB_WATCH=1 requires FOLIO_SCRIBE_WEB_EXPORT_DIR"
@@ -342,7 +353,6 @@ do_install() {
         }
     fi
 
-    LOG_DIR="$VAULT/.logs"
     mkdir -p "$LOG_DIR" "$LAUNCHD_DST"
 
     # Unload any existing agents first
@@ -377,12 +387,11 @@ do_install_web_sync() {
         echo "  Web deploy:$WEB_DEPLOY"
     fi
     echo "  Debounce:  ${WEB_SYNC_DEBOUNCE}s"
-    echo "  Log dir:   $VAULT/.logs"
+    echo "  Log dir:   $LOG_DIR"
     echo ""
 
     validate_web_sync_config
 
-    LOG_DIR="$VAULT/.logs"
     mkdir -p "$LOG_DIR" "$LAUNCHD_DST"
 
     if [ -f "$LAUNCHD_DST/${WEB_SYNC_LABEL}.plist" ]; then

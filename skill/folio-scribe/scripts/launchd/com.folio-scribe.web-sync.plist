@@ -27,6 +27,8 @@
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Frameworks/Python.framework/Versions/3.13/bin</string>
         <key>HOME</key>
         <string>__HOME__</string>
+        <key>FOLIO_SCRIBE_LOG_DIR</key>
+        <string>__LOG_DIR__</string>
         <key>FOLIO_SCRIBE_VAULT</key>
         <string>__VAULT__</string>
         <key>FOLIO_SCRIBE_WEB_EXPORT_DIR</key>

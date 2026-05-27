@@ -290,8 +290,9 @@ skill/folio-scribe/scripts/install_schedule.sh install --vault ~/Documents/MyVau
 | Time (HKT) | Task | Description |
 |:--:|:--|:--|
 | `06:45` | 🌙 US Trading Review | Writes to previous session's note |
-| `08:45` | 🇭🇰 HK Trading Plan | Before HK market open |
+| `08:15` | 🇭🇰 HK Trading Plan | Before HK market open |
 | `16:15` | 🇭🇰 HK Trading Review | After HK market close |
+| `16:30` | 🇺🇸 US Trading Plan Draft | Early pre-market draft |
 | `20:45` | 🇺🇸 US Trading Plan | Before US market open |
 
 These are defaults. Override them during install with local `HH:MM` values:
@@ -299,6 +300,7 @@ These are defaults. Override them during install with local `HH:MM` values:
 ```bash
 FOLIO_SCRIBE_HK_PLAN_TIME=08:40 \
 FOLIO_SCRIBE_HK_REVIEW_TIME=16:20 \
+FOLIO_SCRIBE_US_PLAN_EARLY_TIME=16:35 \
 FOLIO_SCRIBE_US_PLAN_TIME=20:50 \
 FOLIO_SCRIBE_US_REVIEW_TIME=06:50 \
 skill/folio-scribe/scripts/install_schedule.sh install
@@ -310,10 +312,10 @@ When running without arguments, the task type is inferred from the current time:
 
 | Local Time | Task |
 |:--|:--|
-| 05:00 – 08:29 | `us_review` |
-| 08:30 – 12:59 | `hk_plan` |
-| 13:00 – 19:59 | `hk_review` |
-| 20:00 – 04:59 | `us_plan` |
+| 05:00 – 08:14 | `us_review` |
+| 08:15 – 12:59 | `hk_plan` |
+| 16:15 – 16:29 | `hk_review` |
+| 16:30 – 04:59 | `us_plan` |
 
 ```bash
 # Auto-detect
@@ -334,8 +336,8 @@ skill/folio-scribe/scripts/install_schedule.sh status
 skill/folio-scribe/scripts/install_schedule.sh uninstall
 
 # View logs
-cat ~/Documents/Trading/.logs/folio-$(date +%Y%m%d)-hk_plan.log
-cat ~/Documents/Trading/.logs/launchd-hk-plan.out
+cat ~/Library/Logs/folio-scribe/folio-$(date +%Y%m%d)-hk_plan.log
+cat ~/Library/Logs/folio-scribe/launchd-hk-plan.out
 ```
 
 </details>
@@ -346,7 +348,7 @@ cat ~/Documents/Trading/.logs/launchd-hk-plan.out
 - 💻 Mac must be **awake** at trigger time
 - 📅 US Friday review can run on local Saturday morning
 - 🔑 Futu OpenD auto-launches but must have been **logged in at least once**
-- 🤖 Uses `FOLIO_SCRIBE_AI_CLI=claude` by default; set `FOLIO_SCRIBE_AI_CLI=codex` to generate through Codex CLI
+- 🤖 Uses `FOLIO_SCRIBE_AI_CLI=codex` by default; set `FOLIO_SCRIBE_AI_CLI=claude` to generate through Claude Code
 - 🔒 The scheduler reads Futu and writes notes itself; the AI CLI only generates text
 - 🧾 Claude runs in JSON mode and records `modelUsage`; when CC Switch exposes an upstream mapping, the note frontmatter is resolved to the real provider/model (for example `codex:gpt-5.5`)
 - 🧱 Scheduled prompts use fixed Markdown templates and market isolation: HK tasks only receive/write HK symbols, US tasks only receive/write US symbols
@@ -500,9 +502,12 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD port |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_WAIT` | `60` | Seconds to wait for Futu account/position data after OpenD becomes reachable |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL` | `5` | Retry interval while waiting for Futu snapshot data |
-| `FOLIO_SCRIBE_AI_CLI` | `claude` | Text-generation CLI (`claude` / `codex`) |
-| `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `codex` | Fallback CLI used when Claude fails (`codex` / `none`) |
+| `FOLIO_SCRIBE_AI_CLI` | `codex` | Text-generation CLI (`claude` / `codex`) |
+| `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `auto` | Fallback CLI used when the primary CLI fails (`auto` / `claude` / `codex` / `none`) |
 | `FOLIO_SCRIBE_AI_MODEL` | CLI default | Explicit model override for the selected CLI |
+| `FOLIO_SCRIBE_AI_TIMEOUT_SECONDS` | `300` | Wall-clock timeout for each AI CLI call; `0` disables it |
+| `FOLIO_SCRIBE_LOG_DIR` | `~/Library/Logs/folio-scribe` | Runner and launchd log directory |
+| `FOLIO_SCRIBE_TASK_LOCK` | per-task lock in log dir | Optional lock directory override for scheduled task runs |
 | `FOLIO_SCRIBE_CLAUDE` | Auto-detected | Claude Code CLI path |
 | `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | Claude Code settings file used for env/model |
 | `FOLIO_SCRIBE_CLAUDE_MODEL` | Current Claude Code model | Claude-specific model override, kept for compatibility |
@@ -519,8 +524,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_WEB_DEPLOY` | unset | Optional web deploy target (`vercel`) |
 | `FOLIO_SCRIBE_WEB_WATCH` | unset | Set to `1` to install the TradingWeb WatchPaths sync agent |
 | `FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE` | `8` for WatchPaths, `0` for direct sync | Seconds to wait before syncing after a file-change trigger |
-| `FOLIO_SCRIBE_HK_PLAN_TIME` | `08:45` | launchd local time for HK plan |
+| `FOLIO_SCRIBE_HK_PLAN_TIME` | `08:15` | launchd local time for HK plan |
 | `FOLIO_SCRIBE_HK_REVIEW_TIME` | `16:15` | launchd local time for HK review |
+| `FOLIO_SCRIBE_US_PLAN_EARLY_TIME` | `16:30` | launchd local time for the early US draft plan |
 | `FOLIO_SCRIBE_US_PLAN_TIME` | `20:45` | launchd local time for US plan |
 | `FOLIO_SCRIBE_US_REVIEW_TIME` | `06:45` | launchd local time for US review |
 | `FOLIO_SCRIBE_WATCHLIST_MODE` | `dynamic` | Watchlist candidate mode: `dynamic`, `manual`, or `off` |
@@ -861,8 +867,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | 时间 (HKT) | 任务 | 说明 |
 |:--:|:--|:--|
 | `06:45` | 🌙 美股交易总结 | 写入前一交易日笔记 |
-| `08:45` | 🇭🇰 港股交易计划 | 开盘前 |
+| `08:15` | 🇭🇰 港股交易计划 | 开盘前 |
 | `16:15` | 🇭🇰 港股交易总结 | 收盘后 |
+| `16:30` | 🇺🇸 美股交易计划初版 | 早盘前初稿 |
 | `20:45` | 🇺🇸 美股交易计划 | 美股开盘前 |
 
 以上是默认值。安装时可用本地 `HH:MM` 时间覆盖：
@@ -870,6 +877,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 ```bash
 FOLIO_SCRIBE_HK_PLAN_TIME=08:40 \
 FOLIO_SCRIBE_HK_REVIEW_TIME=16:20 \
+FOLIO_SCRIBE_US_PLAN_EARLY_TIME=16:35 \
 FOLIO_SCRIBE_US_PLAN_TIME=20:50 \
 FOLIO_SCRIBE_US_REVIEW_TIME=06:50 \
 skill/folio-scribe/scripts/install_schedule.sh install
@@ -879,10 +887,10 @@ skill/folio-scribe/scripts/install_schedule.sh install
 
 | 本地时间 | 任务 |
 |:--|:--|
-| 05:00 – 08:29 | `us_review` |
-| 08:30 – 12:59 | `hk_plan` |
-| 13:00 – 19:59 | `hk_review` |
-| 20:00 – 04:59 | `us_plan` |
+| 05:00 – 08:14 | `us_review` |
+| 08:15 – 12:59 | `hk_plan` |
+| 16:15 – 16:29 | `hk_review` |
+| 16:30 – 04:59 | `us_plan` |
 
 <details>
 <summary>定时任务管理</summary>
@@ -902,7 +910,7 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 - 电脑需处于开机且未休眠状态
 - 美股周五复盘可在本地周六早上运行
 - Futu OpenD 自动启动，但需已登录过一次
-- 默认使用 `FOLIO_SCRIBE_AI_CLI=claude`；设置 `FOLIO_SCRIBE_AI_CLI=codex` 可切换为 Codex CLI 生成
+- 默认使用 `FOLIO_SCRIBE_AI_CLI=codex`；设置 `FOLIO_SCRIBE_AI_CLI=claude` 可切换为 Claude Code 生成
 - 调度器自行读取 Futu 并写入笔记；AI CLI 只负责生成文本
 - Claude 模式会使用 JSON 输出并读取 `modelUsage`；如果 CC Switch 能提供上游映射，会把笔记 frontmatter 解析成真实 provider/model（例如 `codex:gpt-5.5`）
 - 定时任务 prompt 使用固定 Markdown 模板，并执行市场隔离：港股任务只读/写港股标的，美股任务只读/写美股标的
@@ -919,9 +927,12 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD 端口 |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_WAIT` | `60` | OpenD 端口可连后等待账户/持仓数据就绪的秒数 |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL` | `5` | 等待 Futu 快照数据时的重试间隔 |
-| `FOLIO_SCRIBE_AI_CLI` | `claude` | 文本生成 CLI（`claude` / `codex`） |
-| `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `codex` | Claude 失败时使用的兜底 CLI（`codex` / `none`） |
+| `FOLIO_SCRIBE_AI_CLI` | `codex` | 文本生成 CLI（`claude` / `codex`） |
+| `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `auto` | 主 CLI 失败时使用的兜底 CLI（`auto` / `claude` / `codex` / `none`） |
 | `FOLIO_SCRIBE_AI_MODEL` | CLI 默认值 | 当前 CLI 的显式模型覆盖 |
+| `FOLIO_SCRIBE_AI_TIMEOUT_SECONDS` | `300` | 每次 AI CLI 调用的墙钟超时秒数；`0` 表示禁用 |
+| `FOLIO_SCRIBE_LOG_DIR` | `~/Library/Logs/folio-scribe` | runner 和 launchd 日志目录 |
+| `FOLIO_SCRIBE_TASK_LOCK` | 日志目录下的按任务锁 | 可选的定时任务锁目录覆盖 |
 | `FOLIO_SCRIBE_CLAUDE` | 自动检测 | Claude Code CLI 路径 |
 | `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | 用于读取 env/model 的 Claude Code 设置文件 |
 | `FOLIO_SCRIBE_CLAUDE_MODEL` | 当前 Claude Code 模型 | Claude 专用模型覆盖，保留兼容 |
@@ -938,8 +949,9 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 | `FOLIO_SCRIBE_WEB_DEPLOY` | 未设置 | 可选 Web 发布目标（`vercel`） |
 | `FOLIO_SCRIBE_WEB_WATCH` | 未设置 | 设置为 `1` 时安装 TradingWeb WatchPaths 自动同步 |
 | `FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE` | WatchPaths 为 `8`，直接同步为 `0` | 文件变更触发后等待多少秒再同步 |
-| `FOLIO_SCRIBE_HK_PLAN_TIME` | `08:45` | 港股计划 launchd 本地触发时间 |
+| `FOLIO_SCRIBE_HK_PLAN_TIME` | `08:15` | 港股计划 launchd 本地触发时间 |
 | `FOLIO_SCRIBE_HK_REVIEW_TIME` | `16:15` | 港股总结 launchd 本地触发时间 |
+| `FOLIO_SCRIBE_US_PLAN_EARLY_TIME` | `16:30` | 美股计划初版 launchd 本地触发时间 |
 | `FOLIO_SCRIBE_US_PLAN_TIME` | `20:45` | 美股计划 launchd 本地触发时间 |
 | `FOLIO_SCRIBE_US_REVIEW_TIME` | `06:45` | 美股总结 launchd 本地触发时间 |
 | `FOLIO_SCRIBE_WATCHLIST_MODE` | `dynamic` | 推荐关注候选模式：`dynamic`、`manual` 或 `off` |

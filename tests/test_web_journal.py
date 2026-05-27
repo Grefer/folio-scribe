@@ -71,6 +71,16 @@ discipline_score:
 
 
 class WebJournalBuildTests(unittest.TestCase):
+    def test_copy_template_escapes_site_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "site"
+
+            build_web_journal.copy_template(out, '</h1><script>alert("x")</script>')
+            index = (out / "index.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("</h1><script>", index)
+        self.assertIn("&lt;/h1&gt;&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;", index)
+
     def test_build_site_writes_static_assets_and_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -4,7 +4,7 @@
 # Usage:  run_folio_task.sh [hk_plan|hk_review|us_plan|us_review]
 #
 # Without arguments, auto-detects task type from current time:
-#   05:00–08:29  →  us_review   (美股收盘后总结，写入昨日笔记)
+#   05:00–08:14  →  us_review   (美股收盘后总结，写入昨日笔记)
 #   08:15–12:59  →  hk_plan     (港股开盘前计划)
 #   16:15–16:29  →  hk_review   (港股收盘后总结)
 #   16:30–04:59  →  us_plan     (美股盘前计划；16:30 初版，20:45 后刷新版)
@@ -23,6 +23,11 @@
 #   5. Write the generated section into the daily note
 
 set -euo pipefail
+
+if [ "$(uname -s)" != "Darwin" ]; then
+    echo "ERROR: run_folio_task.sh requires macOS (uses BSD date flags, open, and launchd scheduling assumptions)."
+    exit 1
+fi
 
 # ── Configuration (override via environment variables) ───────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -56,16 +61,30 @@ PLAN_PHASE=$(printf '%s' "$PLAN_PHASE" | tr '[:upper:]' '[:lower:]')
 ALLOW_NON_TRADING_DAY="${FOLIO_SCRIBE_ALLOW_NON_TRADING_DAY:-0}"
 ALLOW_NON_TRADING_DAY=$(printf '%s' "$ALLOW_NON_TRADING_DAY" | tr '[:upper:]' '[:lower:]')
 LANG_PREF="${FOLIO_SCRIBE_LANG:-zh}"   # zh | en
-LOG_DIR="$VAULT/.logs"
+LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$HOME/Library/Logs/folio-scribe}"
 MAX_OPEND_WAIT=90
 MAX_SNAPSHOT_READY_WAIT="${FOLIO_SCRIBE_SNAPSHOT_READY_WAIT:-60}"
 SNAPSHOT_READY_INTERVAL="${FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL:-5}"
+AI_TIMEOUT_SECONDS="${FOLIO_SCRIBE_AI_TIMEOUT_SECONDS:-300}"
 MAX_BUDGET="${FOLIO_SCRIBE_MAX_BUDGET_USD:-0.80}"
 MAX_TURNS=20
 AI_MODEL="${FOLIO_SCRIBE_AI_MODEL:-}"
 AI_MODEL_EXPLICIT=0
 AI_MODEL_LABEL=""
 CLAUDE_FALLBACK_MODEL="${FOLIO_SCRIBE_CLAUDE_FALLBACK_MODEL:-}"
+LOCK_DIR=""
+SENSITIVE_TMP_DIR=""
+
+cleanup() {
+    local status=$?
+    if [ -n "$SENSITIVE_TMP_DIR" ]; then
+        rm -rf "$SENSITIVE_TMP_DIR" 2>/dev/null || true
+    fi
+    if [ -n "$LOCK_DIR" ]; then
+        rmdir "$LOCK_DIR" 2>/dev/null || true
+    fi
+    exit "$status"
+}
 
 if [ -n "${FOLIO_SCRIBE_AI_MODEL:-}" ]; then
     AI_MODEL_EXPLICIT=1
@@ -78,7 +97,10 @@ case "$AI_CLI" in
             AI_MODEL_EXPLICIT=1
         fi
         if [ -z "$AI_MODEL" ] && [ -r "$CLAUDE_SETTINGS" ]; then
-            AI_MODEL=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("model", ""))' "$CLAUDE_SETTINGS" 2>/dev/null || true)
+            AI_MODEL=$(python3 -c 'import json, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.load(handle).get("model", ""))
+' "$CLAUDE_SETTINGS" 2>/dev/null || true)
         fi
         ;;
     codex)
@@ -94,7 +116,8 @@ try:
     with open(path, "rb") as handle:
         print(tomllib.load(handle).get("model", ""))
 except Exception:
-    text = open(path, encoding="utf-8", errors="replace").read()
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        text = handle.read()
     match = re.search(r"(?m)^model\s*=\s*[\"\x27]?([^\"\x27#\n]+)", text)
     print(match.group(1).strip() if match else "")
 ' "$CODEX_CONFIG" 2>/dev/null || true)
@@ -144,7 +167,7 @@ detect_task_type() {
     minute=$((10#$(date +%M)))
     total=$((hour * 60 + minute))
 
-    if   [ "$total" -ge 300  ] && [ "$total" -lt 510  ]; then echo "us_review" # 05:00-08:29
+    if   [ "$total" -ge 300  ] && [ "$total" -lt 495  ]; then echo "us_review" # 05:00-08:14
     elif [ "$total" -ge 495  ] && [ "$total" -lt 780  ]; then echo "hk_plan"   # 08:15-12:59
     elif [ "$total" -ge 975  ] && [ "$total" -lt 990  ]; then echo "hk_review" # 16:15-16:29
     elif [ "$total" -ge 990  ] || [ "$total" -lt 300  ]; then echo "us_plan"   # 16:30-04:59
@@ -185,6 +208,10 @@ case "$ALLOW_NON_TRADING_DAY" in
     *) echo "ERROR: Invalid FOLIO_SCRIBE_ALLOW_NON_TRADING_DAY '$ALLOW_NON_TRADING_DAY'. Use: 0|1"; exit 1 ;;
 esac
 
+case "$AI_TIMEOUT_SECONDS" in
+    ""|*[!0-9]*) echo "ERROR: FOLIO_SCRIBE_AI_TIMEOUT_SECONDS must be a non-negative integer"; exit 1 ;;
+esac
+
 infer_us_plan_phase() {
     local hour minute total
     if [ "$TASK_TYPE" != "us_plan" ]; then
@@ -212,6 +239,14 @@ infer_us_plan_phase
 
 # ── Logging ──────────────────────────────────────────────────────────
 mkdir -p "$LOG_DIR"
+LOCK_DIR="${FOLIO_SCRIBE_TASK_LOCK:-$LOG_DIR/folio-${TASK_TYPE}.lock}"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "Previous $TASK_TYPE still running; exiting."
+    exit 0
+fi
+trap cleanup EXIT
+
+SENSITIVE_TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/folio-scribe-${TASK_TYPE}.XXXXXX")
 LOG_FILE="$LOG_DIR/folio-$(date +%Y%m%d)-${TASK_TYPE}.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo ""
@@ -375,7 +410,7 @@ read_snapshot_json() {
     local json_file="$1"
     shift
     local raw_file
-    raw_file=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-snapshot-raw.XXXXXX")
+    raw_file=$(mktemp "$SENSITIVE_TMP_DIR/snapshot-raw.XXXXXX")
     python3 "$SCRIPT_DIR/read_futu_snapshot.py" "$@" > "$raw_file"
     extract_snapshot_json "$raw_file" "$json_file"
 }
@@ -386,7 +421,8 @@ snapshot_has_trade_data() {
 import json
 import sys
 
-payload = json.load(open(sys.argv[1], encoding="utf-8"))
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
 account = payload.get("account") or {}
 
 def populated(value):
@@ -433,9 +469,9 @@ read_initial_snapshot_when_ready() {
     done
 }
 
-SNAPSHOT_POSITIONS_JSON=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-positions.XXXXXX")
-SNAPSHOT_JSON_FILE=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-snapshot.XXXXXX")
-AI_CONTENT_FILE=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-content.XXXXXX")
+SNAPSHOT_POSITIONS_JSON=$(mktemp "$SENSITIVE_TMP_DIR/positions.XXXXXX")
+SNAPSHOT_JSON_FILE=$(mktemp "$SENSITIVE_TMP_DIR/snapshot.XXXXXX")
+AI_CONTENT_FILE=$(mktemp "$SENSITIVE_TMP_DIR/content.XXXXXX")
 
 echo "Reading Futu snapshot ..."
 read_initial_snapshot_when_ready
@@ -487,7 +523,8 @@ done < <(python3 - "$SNAPSHOT_POSITIONS_JSON" <<'PY'
 import json
 import sys
 
-payload = json.load(open(sys.argv[1], encoding="utf-8"))
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
 seen = set()
 for position in payload.get("positions", []):
     symbol = position.get("symbol")
@@ -503,7 +540,7 @@ case "$TASK_TYPE" in
 esac
 
 if [ "$WATCHLIST_MODE" != "off" ] && [ "$WATCHLIST_MODE" != "manual" ]; then
-    DYNAMIC_WATCHLIST_FILE=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-watchlist.XXXXXX")
+    DYNAMIC_WATCHLIST_FILE=$(mktemp "$SENSITIVE_TMP_DIR/watchlist.XXXXXX")
     echo "Selecting dynamic ${MARKET_LABEL_EN} watchlist candidates from Futu ..."
     if python3 "$SCRIPT_DIR/select_watchlist_candidates.py" \
         --market "$MARKET_LABEL_EN" \
@@ -544,7 +581,8 @@ SNAPSHOT_CONTEXT=$(python3 - "$SNAPSHOT_JSON_FILE" "$MARKET_PREFIX" "$MARKET_LAB
 import json
 import sys
 
-payload = json.load(open(sys.argv[1], encoding="utf-8"))
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
 market_prefix = sys.argv[2].upper()
 market_label = sys.argv[3]
 task_type = sys.argv[4]
@@ -1413,11 +1451,26 @@ EOF
 }
 
 PROMPT=$(build_prompt)
-echo "Prompt:"
-echo "$PROMPT"
-echo "---"
+echo "Prompt built (${#PROMPT} characters; redacted from logs)."
 
 # ── Run configured AI CLI text-only ─────────────────────────────────
+run_with_timeout() {
+    if [ "$AI_TIMEOUT_SECONDS" -eq 0 ]; then
+        "$@"
+        return
+    fi
+
+    python3 -c 'import subprocess, sys
+timeout = int(sys.argv[1])
+cmd = sys.argv[2:]
+try:
+    raise SystemExit(subprocess.run(cmd, timeout=timeout).returncode)
+except subprocess.TimeoutExpired:
+    print(f"ERROR: command timed out after {timeout}s: {cmd[0]}", file=sys.stderr)
+    raise SystemExit(124)
+' "$AI_TIMEOUT_SECONDS" "$@"
+}
+
 configured_codex_model() {
     if [ -n "${FOLIO_SCRIBE_CODEX_MODEL:-}" ]; then
         printf '%s' "$FOLIO_SCRIBE_CODEX_MODEL"
@@ -1431,7 +1484,8 @@ try:
     with open(path, "rb") as handle:
         print(tomllib.load(handle).get("model", ""))
 except Exception:
-    text = open(path, encoding="utf-8", errors="replace").read()
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        text = handle.read()
     match = re.search(r"(?m)^model\s*=\s*[\"\x27]?([^\"\x27#\n]+)", text)
     print(match.group(1).strip() if match else "")
 ' "$CODEX_CONFIG" 2>/dev/null || true
@@ -1444,7 +1498,10 @@ configured_claude_model() {
         return 0
     fi
     if [ -r "$CLAUDE_SETTINGS" ]; then
-        python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("model", ""))' "$CLAUDE_SETTINGS" 2>/dev/null || true
+        python3 -c 'import json, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.load(handle).get("model", ""))
+' "$CLAUDE_SETTINGS" 2>/dev/null || true
     fi
 }
 
@@ -1518,10 +1575,10 @@ run_claude_cli() {
     fi
 
     local claude_json model_label_file
-    claude_json=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-claude-json.XXXXXX")
-    model_label_file=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-claude-model.XXXXXX")
+    claude_json=$(mktemp "$SENSITIVE_TMP_DIR/claude-json.XXXXXX")
+    model_label_file=$(mktemp "$SENSITIVE_TMP_DIR/claude-model.XXXXXX")
 
-    if "$CLAUDE" "${args[@]}" > "$claude_json"; then
+    if run_with_timeout "$CLAUDE" "${args[@]}" > "$claude_json"; then
         :
     else
         local status=$?
@@ -1596,7 +1653,7 @@ run_codex_cli() {
     echo "Calling Codex exec text-only (runner controls data and writes) ..."
 
     local codex_log codex_model codex_model_explicit
-    codex_log=$(mktemp "${TMPDIR:-/tmp}/folio-scribe-codex.XXXXXX")
+    codex_log=$(mktemp "$SENSITIVE_TMP_DIR/codex.XXXXXX")
     codex_model_explicit=0
     if [ "$AI_CLI" = "codex" ]; then
         codex_model="$AI_MODEL"
@@ -1640,7 +1697,7 @@ run_codex_cli() {
         echo "Codex disabled features: $CODEX_DISABLE_FEATURES"
     fi
 
-    if printf '%s' "$PROMPT" | "$CODEX" "${args[@]}" - > "$codex_log" 2>&1; then
+    if printf '%s' "$PROMPT" | run_with_timeout "$CODEX" "${args[@]}" - > "$codex_log" 2>&1; then
         :
     else
         local status=$?

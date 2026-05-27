@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html as html_module
 import json
 import re
 import shutil
@@ -309,6 +310,7 @@ def copy_template(out_dir: Path, title: str) -> None:
     if not TEMPLATE_DIR.exists():
         raise FileNotFoundError(f"Web template directory not found: {TEMPLATE_DIR}")
 
+    safe_title = html_module.escape(title, quote=True)
     for source in TEMPLATE_DIR.rglob("*"):
         relative = source.relative_to(TEMPLATE_DIR)
         target = out_dir / relative
@@ -317,7 +319,7 @@ def copy_template(out_dir: Path, title: str) -> None:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         if source.suffix.lower() in {".html", ".css", ".js"}:
-            text = source.read_text(encoding="utf-8").replace("__SITE_TITLE__", title)
+            text = source.read_text(encoding="utf-8").replace("__SITE_TITLE__", safe_title)
             target.write_text(text, encoding="utf-8")
         else:
             shutil.copy2(source, target)

@@ -427,6 +427,17 @@ def resolve_initial_model_label(cli: str) -> tuple[str, str, bool]:
     raise ValueError(f"Unsupported AI CLI: {cli}")
 
 
+def ai_timeout() -> int | None:
+    value = os.environ.get("FOLIO_SCRIBE_AI_TIMEOUT_SECONDS", "300")
+    try:
+        seconds = int(value)
+    except ValueError as exc:
+        raise ValueError("FOLIO_SCRIBE_AI_TIMEOUT_SECONDS must be a non-negative integer") from exc
+    if seconds < 0:
+        raise ValueError("FOLIO_SCRIBE_AI_TIMEOUT_SECONDS must be a non-negative integer")
+    return seconds or None
+
+
 def run_claude(prompt: str, content_path: Path, fallback_label: str, model: str, explicit_model: bool) -> str:
     claude = os.environ.get("FOLIO_SCRIBE_CLAUDE") or shutil.which("claude") or "/opt/homebrew/bin/claude"
     settings = Path(os.environ.get("FOLIO_SCRIBE_CLAUDE_SETTINGS", Path.home() / ".claude/settings.json"))
@@ -458,7 +469,10 @@ def run_claude(prompt: str, content_path: Path, fallback_label: str, model: str,
     if fallback_model:
         args.extend(["--fallback-model", fallback_model])
 
-    result = subprocess.run(args, text=True, capture_output=True, check=False)
+    try:
+        result = subprocess.run(args, text=True, capture_output=True, check=False, timeout=ai_timeout())
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Claude CLI timed out after {exc.timeout}s") from exc
     if result.returncode != 0:
         if result.stdout:
             print(result.stdout[:3000], file=sys.stderr)
@@ -544,7 +558,10 @@ def run_codex(prompt: str, content_path: Path, vault: Path, model: str, explicit
         args.extend(["--model", model])
     args.append("-")
 
-    result = subprocess.run(args, input=prompt, text=True, capture_output=True, check=False)
+    try:
+        result = subprocess.run(args, input=prompt, text=True, capture_output=True, check=False, timeout=ai_timeout())
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Codex CLI timed out after {exc.timeout}s") from exc
     if result.returncode != 0:
         if result.stdout:
             print(result.stdout[:3000], file=sys.stderr)
@@ -574,7 +591,9 @@ def generate_with_ai(prompt: str, vault: Path) -> tuple[str, str]:
     if fallback not in {"", "none", "auto", "claude", "codex"}:
         raise ValueError("FOLIO_SCRIBE_AI_FALLBACK_CLI must be auto, claude, codex, or none")
 
-    content_path = Path(tempfile.mkstemp(prefix="folio-periodic-summary-", suffix=".md")[1])
+    fd, temp_path = tempfile.mkstemp(prefix="folio-periodic-summary-", suffix=".md")
+    os.close(fd)
+    content_path = Path(temp_path)
     initial_label, model, explicit = resolve_initial_model_label(primary)
     fallback_cli = resolve_fallback_cli(primary, fallback)
 
@@ -657,7 +676,8 @@ def maybe_sync_web(vault: Path) -> None:
         return
     sync_script = SCRIPT_DIR / "sync_tradingweb.sh"
     if not sync_script.exists():
-        raise FileNotFoundError(f"TradingWeb sync script not found: {sync_script}")
+        print(f"WARNING: TradingWeb sync script not found: {sync_script}", file=sys.stderr)
+        return
     args = [
         str(sync_script),
         "--vault",
@@ -670,7 +690,10 @@ def maybe_sync_web(vault: Path) -> None:
         os.environ.get("FOLIO_SCRIBE_WEB_DEPLOY", "none") or "none",
         "--quiet",
     ]
-    subprocess.run(args, check=True)
+    try:
+        subprocess.run(args, check=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        print(f"WARNING: TradingWeb sync failed: {exc}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:

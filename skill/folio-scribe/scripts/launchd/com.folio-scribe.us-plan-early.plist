@@ -26,12 +26,16 @@
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Frameworks/Python.framework/Versions/3.13/bin</string>
         <key>HOME</key>
         <string>__HOME__</string>
+        <key>FOLIO_SCRIBE_LOG_DIR</key>
+        <string>__LOG_DIR__</string>
         <key>FOLIO_SCRIBE_AI_CLI</key>
         <string>__AI_CLI__</string>
         <key>FOLIO_SCRIBE_AI_FALLBACK_CLI</key>
         <string>__AI_FALLBACK_CLI__</string>
         <key>FOLIO_SCRIBE_AI_MODEL</key>
         <string>__AI_MODEL__</string>
+        <key>FOLIO_SCRIBE_AI_TIMEOUT_SECONDS</key>
+        <string>__AI_TIMEOUT_SECONDS__</string>
         <key>FOLIO_SCRIBE_PLAN_PHASE</key>
         <string>early</string>
         <key>FOLIO_SCRIBE_WEB_EXPORT_DIR</key>

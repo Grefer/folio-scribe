@@ -38,6 +38,21 @@ HKEX_HOLIDAYS: dict[int, dict[dt.date, str]] = {
         dt.date(2026, 10, 19): "The day following Chung Yeung Festival",
         dt.date(2026, 12, 25): "Christmas Day",
     },
+    2027: {
+        dt.date(2027, 1, 1): "The first day of January",
+        dt.date(2027, 2, 8): "The third day of Lunar New Year",
+        dt.date(2027, 2, 9): "The fourth day of Lunar New Year",
+        dt.date(2027, 3, 26): "Good Friday",
+        dt.date(2027, 3, 29): "Easter Monday",
+        dt.date(2027, 4, 5): "Ching Ming Festival",
+        dt.date(2027, 5, 13): "The Birthday of the Buddha",
+        dt.date(2027, 6, 9): "Tuen Ng Festival",
+        dt.date(2027, 7, 1): "Hong Kong Special Administrative Region Establishment Day",
+        dt.date(2027, 9, 16): "The day following the Chinese Mid-Autumn Festival",
+        dt.date(2027, 10, 1): "National Day",
+        dt.date(2027, 10, 8): "Chung Yeung Festival",
+        dt.date(2027, 12, 27): "The first weekday after Christmas Day",
+    },
 }
 
 

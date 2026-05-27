@@ -27,6 +27,7 @@ Environment:
   FOLIO_SCRIBE_WEB_TITLE
   FOLIO_SCRIBE_WEB_DEPLOY          Optional deploy target: vercel
   FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE   Optional delay before syncing, useful for launchd WatchPaths
+  FOLIO_SCRIBE_LOG_DIR             Log and lock directory (default: ~/Library/Logs/folio-scribe)
   FOLIO_SCRIBE_VERCEL_PROJECT
   FOLIO_SCRIBE_VERCEL_SCOPE
   FOLIO_SCRIBE_VERCEL_TARGET
@@ -67,7 +68,7 @@ if [ "$DEPLOY" = "vercel" ] && [ ! -x "$SCRIPT_DIR/deploy_web_journal_vercel.sh"
     exit 1
 fi
 
-LOG_DIR="$VAULT/.logs"
+LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$HOME/Library/Logs/folio-scribe}"
 mkdir -p "$LOG_DIR"
 LOCK_DIR="${FOLIO_SCRIBE_WEB_SYNC_LOCK:-$LOG_DIR/web-sync.lock}"
 

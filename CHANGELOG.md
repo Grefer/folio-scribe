@@ -4,7 +4,15 @@ All notable changes to folio-scribe are documented here.
 
 ## [Unreleased]
 
-No unreleased changes.
+### Added
+- 2027 Hong Kong holiday coverage for the bundled market calendar.
+
+### Fixed
+- Scheduled runners now use a per-task lock, private temp directory cleanup, and AI CLI wall-clock timeouts.
+- Scheduled runner logs no longer dump full prompts with account and position data, and default logs now live outside the vault.
+- Periodic summaries now close temporary file descriptors and treat TradingWeb sync failures as warnings after the summary is written.
+- TradingWeb template title replacement is HTML-escaped.
+- Auto-detected task windows no longer overlap between US review and HK plan.
 
 ## [0.1.3] – 2026-05-08
 
