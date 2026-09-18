@@ -37,10 +37,13 @@ class Position:
 @dataclass(frozen=True)
 class Order:
     symbol: str
+    order_id: str | None = None
     side: str | None = None
     quantity: Decimal | None = None
     price: Money | None = None
     status: str | None = None
+    filled_quantity: Decimal | None = None
+    filled_avg_price: Money | None = None
     submitted_at: datetime | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -48,6 +51,8 @@ class Order:
 @dataclass(frozen=True)
 class Fill:
     symbol: str
+    deal_id: str | None = None
+    order_id: str | None = None
     side: str | None = None
     quantity: Decimal | None = None
     price: Money | None = None

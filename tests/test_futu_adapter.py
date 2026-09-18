@@ -32,6 +32,27 @@ class FutuAdapterTests(unittest.TestCase):
         self.assertEqual(positions[0].quantity, Decimal("100"))
         self.assertEqual(positions[0].cost, Decimal("14.598"))
 
+    def test_positions_prefer_diluted_cost_for_pl_basis(self) -> None:
+        positions = positions_from_rows(
+            [
+                {
+                    "code": "HK.01810",
+                    "stock_name": "小米集团-W",
+                    "qty": "3000",
+                    "average_cost": "31.329",
+                    "cost_price": "39.629",
+                    "market_val": "88860",
+                    "unrealized_pl": "-5128.4173",
+                    "pl_val": "-30028",
+                    "realized_pl": "-24899.5827",
+                    "currency": "HKD",
+                }
+            ]
+        )
+
+        self.assertEqual(positions[0].cost, Decimal("39.629"))
+        self.assertEqual(positions[0].unrealized_pnl, Decimal("-30028"))
+
     def test_account_from_rows(self) -> None:
         account = account_from_rows(
             [
@@ -58,16 +79,22 @@ class FutuAdapterTests(unittest.TestCase):
                     "qty": "10",
                     "price": "280.5",
                     "order_status": "SUBMITTED",
-                    "create_time": "2026-05-07 21:35:00",
+                    "create_time": "2026-05-07 21:35:00.123",
+                    "order_id": "ORDER-1",
+                    "dealt_qty": "2",
+                    "dealt_avg_price": "280.1",
                 }
             ]
         )
 
         self.assertEqual(len(orders), 1)
         self.assertEqual(orders[0].symbol, "US.AAPL")
+        self.assertEqual(orders[0].order_id, "ORDER-1")
         self.assertEqual(orders[0].side, "BUY")
         self.assertEqual(orders[0].quantity, Decimal("10"))
         self.assertEqual(orders[0].status, "SUBMITTED")
+        self.assertEqual(orders[0].filled_quantity, Decimal("2"))
+        self.assertEqual(orders[0].filled_avg_price, Decimal("280.1"))
         self.assertIsNotNone(orders[0].submitted_at)
 
     def test_fills_from_rows(self) -> None:
@@ -78,13 +105,17 @@ class FutuAdapterTests(unittest.TestCase):
                     "trd_side": "SELL",
                     "qty": "5",
                     "price": "287.51",
-                    "create_time": "2026-05-07 22:01:00",
+                    "create_time": "2026-05-07 22:01:00.456",
+                    "deal_id": 123456,
+                    "order_id": "ORDER-1",
                 }
             ]
         )
 
         self.assertEqual(len(fills), 1)
         self.assertEqual(fills[0].symbol, "US.AAPL")
+        self.assertEqual(fills[0].deal_id, "123456")
+        self.assertEqual(fills[0].order_id, "ORDER-1")
         self.assertEqual(fills[0].side, "SELL")
         self.assertEqual(fills[0].quantity, Decimal("5"))
         self.assertEqual(fills[0].price, Decimal("287.51"))

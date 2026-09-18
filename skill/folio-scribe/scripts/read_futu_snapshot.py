@@ -53,10 +53,13 @@ class Position:
 @dataclass(frozen=True)
 class Order:
     symbol: str
+    order_id: str | None = None
     side: str | None = None
     quantity: Decimal | None = None
     price: Money | None = None
     status: str | None = None
+    filled_quantity: Decimal | None = None
+    filled_avg_price: Money | None = None
     submitted_at: datetime | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -64,6 +67,8 @@ class Order:
 @dataclass(frozen=True)
 class Fill:
     symbol: str
+    deal_id: str | None = None
+    order_id: str | None = None
     side: str | None = None
     quantity: Decimal | None = None
     price: Money | None = None
@@ -135,7 +140,14 @@ def _parse_datetime(value: Any) -> datetime | None:
     if value is None or value == "" or value == "N/A":
         return None
     text = str(value)
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M:%S", "%Y-%m-%d", "%Y/%m/%d"):
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y/%m/%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+    ):
         try:
             return datetime.strptime(text, fmt)
         except ValueError:
@@ -169,9 +181,11 @@ def positions_from_rows(rows: Sequence[dict[str, Any]]) -> list[Position]:
                 symbol=symbol,
                 name=row.get("stock_name") or row.get("name"),
                 quantity=_decimal(_first_present(row, "qty", "quantity")),
-                cost=_decimal(_first_present(row, "cost_price", "cost")),
+                # Prefer the diluted-cost basis shown by Futu's cost_price.
+                # Pair it with pl_val below so cost and P/L use one basis.
+                cost=_decimal(_first_present(row, "diluted_cost", "cost_price", "cost")),
                 market_value=_decimal(_first_present(row, "market_val", "market_value")),
-                unrealized_pnl=_decimal(_first_present(row, "unrealized_pl", "pl_val", "unrealized_pnl")),
+                unrealized_pnl=_decimal(_first_present(row, "pl_val", "unrealized_pnl", "unrealized_pl")),
                 realized_pnl=_decimal(_first_present(row, "realized_pl", "realized_pnl")),
                 portfolio_weight=_decimal(row.get("portfolio_weight")),
                 currency=row.get("currency"),
@@ -190,10 +204,13 @@ def orders_from_rows(rows: Sequence[dict[str, Any]]) -> list[Order]:
         orders.append(
             Order(
                 symbol=symbol,
+                order_id=str(row.get("order_id") or "") or None,
                 side=row.get("trd_side") or row.get("side"),
                 quantity=_decimal(_first_present(row, "qty", "quantity")),
                 price=_decimal(row.get("price")),
                 status=row.get("order_status") or row.get("status"),
+                filled_quantity=_decimal(_first_present(row, "dealt_qty", "filled_quantity")),
+                filled_avg_price=_decimal(_first_present(row, "dealt_avg_price", "filled_avg_price")),
                 submitted_at=_parse_datetime(row.get("create_time") or row.get("submitted_at")),
                 raw=dict(row),
             )
@@ -210,6 +227,8 @@ def fills_from_rows(rows: Sequence[dict[str, Any]]) -> list[Fill]:
         fills.append(
             Fill(
                 symbol=symbol,
+                deal_id=str(row.get("deal_id") or "") or None,
+                order_id=str(row.get("order_id") or "") or None,
                 side=row.get("trd_side") or row.get("side"),
                 quantity=_decimal(_first_present(row, "qty", "quantity")),
                 price=_decimal(row.get("price")),
