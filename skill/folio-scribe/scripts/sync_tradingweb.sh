@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
+VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/TradingNote}"
 OUT_DIR="${FOLIO_SCRIBE_WEB_EXPORT_DIR:-$HOME/Documents/TradingWeb}"
 TITLE="${FOLIO_SCRIBE_WEB_TITLE:-Folio Scribe Journal}"
 DEPLOY="${FOLIO_SCRIBE_WEB_DEPLOY:-}"

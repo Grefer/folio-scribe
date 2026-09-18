@@ -698,7 +698,7 @@ def maybe_sync_web(vault: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate Weekly/Monthly Folio Scribe summary notes.")
-    parser.add_argument("--vault", default=os.environ.get("FOLIO_SCRIBE_VAULT", str(Path.home() / "Documents/Trading")))
+    parser.add_argument("--vault", default=os.environ.get("FOLIO_SCRIBE_VAULT", str(Path.home() / "Documents/TradingNote")))
     parser.add_argument("--period", choices=["weekly", "monthly"], required=True)
     parser.add_argument("--date", default=dt.date.today().isoformat(), help="Anchor date, default today")
     parser.add_argument("--week", help="Explicit ISO week, e.g. 2026-W21")

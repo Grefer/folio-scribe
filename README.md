@@ -193,7 +193,7 @@ Export Daily notes into a static, mobile-friendly dashboard:
 
 ```bash
 python3 skill/folio-scribe/scripts/build_web_journal.py \
-  --vault ~/Documents/Trading \
+  --vault ~/Documents/TradingNote \
   --out ~/Documents/TradingWeb \
   --title "Trading Journal"
 ```
@@ -210,7 +210,7 @@ The same build can be run through the sync wrapper used by automations:
 
 ```bash
 skill/folio-scribe/scripts/sync_tradingweb.sh \
-  --vault ~/Documents/Trading \
+  --vault ~/Documents/TradingNote \
   --out ~/Documents/TradingWeb \
   --title "Trading Journal"
 ```
@@ -278,7 +278,7 @@ skill/folio-scribe/scripts/install_schedule.sh install
 Automate journal generation via macOS launchd:
 
 ```bash
-# Install (default vault ~/Documents/Trading)
+# Install (default vault ~/Documents/TradingNote)
 skill/folio-scribe/scripts/install_schedule.sh install
 
 # Custom vault
@@ -348,11 +348,11 @@ cat ~/Library/Logs/folio-scribe/launchd-hk-plan.out
 - 💻 Mac must be **awake** at trigger time
 - 📅 US Friday review can run on local Saturday morning
 - 🔑 Futu OpenD auto-launches but must have been **logged in at least once**
-- 🤖 Uses `FOLIO_SCRIBE_AI_CLI=codex` by default; set `FOLIO_SCRIBE_AI_CLI=claude` to generate through Claude Code
+- 🤖 Uses `FOLIO_SCRIBE_AI_CLI=claude` by default; set `FOLIO_SCRIBE_AI_CLI=codex` to generate through Codex
 - 🔒 The scheduler reads Futu and writes notes itself; the AI CLI only generates text
 - 🧾 Claude runs in JSON mode and records `modelUsage`; when CC Switch exposes an upstream mapping, the note frontmatter is resolved to the real provider/model (for example `codex:gpt-5.5`)
 - 🧱 Scheduled prompts use fixed Markdown templates and market isolation: HK tasks only receive/write HK symbols, US tasks only receive/write US symbols
-- 🔁 Reinstall launchd with `FOLIO_SCRIBE_AI_CLI=codex skill/folio-scribe/scripts/install_schedule.sh install` to persist a Codex-backed schedule
+- 🔁 Reinstall launchd with `FOLIO_SCRIBE_AI_CLI=claude skill/folio-scribe/scripts/install_schedule.sh install` to persist a Claude-backed schedule
 
 </details>
 
@@ -497,16 +497,16 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 
 | Variable | Default | Description |
 |:--|:--|:--|
-| `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault path |
+| `FOLIO_SCRIBE_VAULT` | `~/Documents/TradingNote` | Obsidian vault path |
 | `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD app path |
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD port |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_WAIT` | `60` | Seconds to wait for Futu account/position data after OpenD becomes reachable |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL` | `5` | Retry interval while waiting for Futu snapshot data |
-| `FOLIO_SCRIBE_AI_CLI` | `codex` | Text-generation CLI (`claude` / `codex`) |
+| `FOLIO_SCRIBE_AI_CLI` | `claude` | Text-generation CLI (`claude` / `codex`) |
 | `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `auto` | Fallback CLI used when the primary CLI fails (`auto` / `claude` / `codex` / `none`) |
 | `FOLIO_SCRIBE_AI_MODEL` | CLI default | Explicit model override for the selected CLI |
 | `FOLIO_SCRIBE_AI_TIMEOUT_SECONDS` | `300` | Wall-clock timeout for each AI CLI call; `0` disables it |
-| `FOLIO_SCRIBE_LOG_DIR` | `~/Library/Logs/folio-scribe` | Runner and launchd log directory |
+| `FOLIO_SCRIBE_LOG_DIR` | `<vault>/.logs` | Runner and launchd log directory |
 | `FOLIO_SCRIBE_TASK_LOCK` | per-task lock in log dir | Optional lock directory override for scheduled task runs |
 | `FOLIO_SCRIBE_CLAUDE` | Auto-detected | Claude Code CLI path |
 | `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | Claude Code settings file used for env/model |
@@ -720,7 +720,7 @@ plan, review, hk_plan, hk_review, us_plan, us_review
 
 ```bash
 python3 skill/folio-scribe/scripts/build_web_journal.py \
-  --vault ~/Documents/Trading \
+  --vault ~/Documents/TradingNote \
   --out ~/Documents/TradingWeb \
   --title "Trading Journal"
 ```
@@ -737,7 +737,7 @@ python3 -m http.server 8787 --directory ~/Documents/TradingWeb
 
 ```bash
 skill/folio-scribe/scripts/sync_tradingweb.sh \
-  --vault ~/Documents/Trading \
+  --vault ~/Documents/TradingNote \
   --out ~/Documents/TradingWeb \
   --title "Trading Journal"
 ```
@@ -910,11 +910,11 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 - 电脑需处于开机且未休眠状态
 - 美股周五复盘可在本地周六早上运行
 - Futu OpenD 自动启动，但需已登录过一次
-- 默认使用 `FOLIO_SCRIBE_AI_CLI=codex`；设置 `FOLIO_SCRIBE_AI_CLI=claude` 可切换为 Claude Code 生成
+- 默认使用 `FOLIO_SCRIBE_AI_CLI=claude`；设置 `FOLIO_SCRIBE_AI_CLI=codex` 可切换为 Codex 生成
 - 调度器自行读取 Futu 并写入笔记；AI CLI 只负责生成文本
 - Claude 模式会使用 JSON 输出并读取 `modelUsage`；如果 CC Switch 能提供上游映射，会把笔记 frontmatter 解析成真实 provider/model（例如 `codex:gpt-5.5`）
 - 定时任务 prompt 使用固定 Markdown 模板，并执行市场隔离：港股任务只读/写港股标的，美股任务只读/写美股标的
-- 如需让 launchd 持久使用 Codex，执行 `FOLIO_SCRIBE_AI_CLI=codex skill/folio-scribe/scripts/install_schedule.sh install` 重装定时任务
+- 如需让 launchd 持久使用 Claude，执行 `FOLIO_SCRIBE_AI_CLI=claude skill/folio-scribe/scripts/install_schedule.sh install` 重装定时任务
 
 </details>
 
@@ -922,16 +922,16 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 
 | 变量 | 默认值 | 说明 |
 |:--|:--|:--|
-| `FOLIO_SCRIBE_VAULT` | `~/Documents/Trading` | Obsidian vault 路径 |
+| `FOLIO_SCRIBE_VAULT` | `~/Documents/TradingNote` | Obsidian vault 路径 |
 | `FOLIO_SCRIBE_OPEND_APP` | `~/Applications/Futu_OpenD/FutuOpenD.app` | Futu OpenD 应用路径 |
 | `FOLIO_SCRIBE_OPEND_PORT` | `11111` | Futu OpenD 端口 |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_WAIT` | `60` | OpenD 端口可连后等待账户/持仓数据就绪的秒数 |
 | `FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL` | `5` | 等待 Futu 快照数据时的重试间隔 |
-| `FOLIO_SCRIBE_AI_CLI` | `codex` | 文本生成 CLI（`claude` / `codex`） |
+| `FOLIO_SCRIBE_AI_CLI` | `claude` | 文本生成 CLI（`claude` / `codex`） |
 | `FOLIO_SCRIBE_AI_FALLBACK_CLI` | `auto` | 主 CLI 失败时使用的兜底 CLI（`auto` / `claude` / `codex` / `none`） |
 | `FOLIO_SCRIBE_AI_MODEL` | CLI 默认值 | 当前 CLI 的显式模型覆盖 |
 | `FOLIO_SCRIBE_AI_TIMEOUT_SECONDS` | `300` | 每次 AI CLI 调用的墙钟超时秒数；`0` 表示禁用 |
-| `FOLIO_SCRIBE_LOG_DIR` | `~/Library/Logs/folio-scribe` | runner 和 launchd 日志目录 |
+| `FOLIO_SCRIBE_LOG_DIR` | `<vault>/.logs` | runner 和 launchd 日志目录 |
 | `FOLIO_SCRIBE_TASK_LOCK` | 日志目录下的按任务锁 | 可选的定时任务锁目录覆盖 |
 | `FOLIO_SCRIBE_CLAUDE` | 自动检测 | Claude Code CLI 路径 |
 | `FOLIO_SCRIBE_CLAUDE_SETTINGS` | `~/.claude/settings.json` | 用于读取 env/model 的 Claude Code 设置文件 |

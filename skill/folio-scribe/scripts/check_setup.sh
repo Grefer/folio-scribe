@@ -18,7 +18,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
+VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/TradingNote}"
 OPEND_PORT="${FOLIO_SCRIBE_OPEND_PORT:-11111}"
 AI_CLI="${FOLIO_SCRIBE_AI_CLI:-claude}"
 AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
