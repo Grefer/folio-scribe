@@ -81,6 +81,49 @@ Use Futu capabilities as inputs to the Folio Scribe workflow:
 
 Treat anomaly, sentiment, and technical signals as watchlist and risk-context inputs, not as standalone buy/sell instructions.
 
+## IBKR Data Source
+
+When the connected Interactive Brokers (IBKR) app is available, use it as the
+primary structured source for IBKR account data. Read positions, account
+metrics, currency balances, live orders, and the relevant trade window from
+the connector immediately before generating a plan or review. Do not require
+IB Gateway, TWS, IBKR Desktop, screenshots, or historical notes for those
+fields.
+
+Use Futu OpenD as the primary quote source when the IBKR account lacks the
+required real-time market-data subscription. Keep the broker roles separate:
+
+- **IBKR app**: positions, broker cost basis, market value, account P/L,
+  cash/balances, buying power, margin, leverage, live orders, and trades.
+- **Futu OpenD**: real-time and extended-hours quotes, bid/ask, K-lines,
+  volume, capital flow, option-chain market data, and trigger validation.
+
+After reading IBKR positions, dynamically request OpenD quotes for every held
+symbol that is missing from the initial Futu snapshot. Do not maintain a
+hard-coded IBKR holdings list just to obtain market data.
+
+If the IBKR app is unavailable, report the missing account fields explicitly.
+Only then use the bundled read-only TWS / IB Gateway helper as a fallback:
+
+```bash
+python3 scripts/read_ibkr_snapshot.py --port 4001 --counts-only
+python3 scripts/read_ibkr_snapshot.py --port 4001 US.NVDA US.GOOGL
+```
+
+For the fallback, connect with `readonly=True`; common live ports are `4001`
+for IB Gateway and `7496` for TWS. Never infer current IBKR positions from an
+older journal entry when both the connector and local fallback are unavailable.
+
+Use IBKR capabilities as inputs to the Folio Scribe workflow:
+
+- **Portfolio and account**: net liquidation, cash, buying power, margin,
+  cushion, positions, cost basis, market value, and P/L.
+- **Orders and fills**: current open trades, order status, fill price, fill
+  quantity, execution time, and commissions when available.
+- **Market data**: optional quote snapshots for subscribed symbols. If market
+  data is delayed or unavailable, treat portfolio market values as position
+  context rather than live quote confirmation.
+
 ## Market Sessions and Time Zones
 
 Always identify which market session the output belongs to before writing a plan or review.
