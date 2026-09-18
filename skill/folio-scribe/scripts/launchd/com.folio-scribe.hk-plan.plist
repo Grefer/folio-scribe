@@ -26,16 +26,26 @@
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Frameworks/Python.framework/Versions/3.13/bin</string>
         <key>HOME</key>
         <string>__HOME__</string>
+        <key>USER</key>
+        <string>__LOGIN_USER__</string>
+        <key>LOGNAME</key>
+        <string>__LOGIN_USER__</string>
         <key>FOLIO_SCRIBE_LOG_DIR</key>
         <string>__LOG_DIR__</string>
+        <key>FOLIO_SCRIBE_VAULT</key>
+        <string>__VAULT__</string>
         <key>FOLIO_SCRIBE_AI_CLI</key>
         <string>__AI_CLI__</string>
         <key>FOLIO_SCRIBE_AI_FALLBACK_CLI</key>
         <string>__AI_FALLBACK_CLI__</string>
         <key>FOLIO_SCRIBE_AI_MODEL</key>
         <string>__AI_MODEL__</string>
+        <key>FOLIO_SCRIBE_CODEX_PROFILE</key>
+        <string>__CODEX_PROFILE__</string>
         <key>FOLIO_SCRIBE_AI_TIMEOUT_SECONDS</key>
         <string>__AI_TIMEOUT_SECONDS__</string>
+        <key>FOLIO_SCRIBE_DETERMINISTIC_FALLBACK</key>
+        <string>__DETERMINISTIC_FALLBACK__</string>
         <key>FOLIO_SCRIBE_WEB_EXPORT_DIR</key>
         <string>__WEB_EXPORT_DIR__</string>
         <key>FOLIO_SCRIBE_WEB_TITLE</key>

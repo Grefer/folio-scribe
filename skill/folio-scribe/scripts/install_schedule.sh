@@ -13,6 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCHD_SRC="$SCRIPT_DIR/launchd"
 LAUNCHD_DST="$HOME/Library/LaunchAgents"
+LOGIN_USER="${FOLIO_SCRIBE_LOGIN_USER:-$(id -un)}"
 SCHEDULE_LABELS=(
     com.folio-scribe.hk-plan
     com.folio-scribe.hk-review
@@ -26,19 +27,27 @@ WEB_SYNC_LABEL="com.folio-scribe.web-sync"
 LABELS=("${SCHEDULE_LABELS[@]}" "$WEB_SYNC_LABEL")
 
 # ── Defaults (override with flags) ──────────────────────────────────
-VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
+VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/TradingNote}"
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # parent of scripts/
-AI_CLI="${FOLIO_SCRIBE_AI_CLI:-codex}"
+AI_CLI="${FOLIO_SCRIBE_AI_CLI:-claude}"
 AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
 AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-auto}"
 AI_MODEL="${FOLIO_SCRIBE_AI_MODEL:-}"
+CODEX_PROFILE="${FOLIO_SCRIBE_CODEX_PROFILE:-}"
 AI_TIMEOUT_SECONDS="${FOLIO_SCRIBE_AI_TIMEOUT_SECONDS:-300}"
+DETERMINISTIC_FALLBACK="${FOLIO_SCRIBE_DETERMINISTIC_FALLBACK:-1}"
+IBKR_SNAPSHOT_MODE="${FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE:-auto}"
+IBKR_HOST="${FOLIO_SCRIBE_IBKR_HOST:-127.0.0.1}"
+IBKR_PORT="${FOLIO_SCRIBE_IBKR_PORT:-4001}"
+IBKR_CLIENT_ID="${FOLIO_SCRIBE_IBKR_CLIENT_ID:-91}"
+IBKR_TIMEOUT="${FOLIO_SCRIBE_IBKR_TIMEOUT:-45}"
+IBKR_ACCOUNT="${FOLIO_SCRIBE_IBKR_ACCOUNT:-}"
 WEB_EXPORT_DIR="${FOLIO_SCRIBE_WEB_EXPORT_DIR:-}"
 WEB_TITLE="${FOLIO_SCRIBE_WEB_TITLE:-Folio Scribe Journal}"
 WEB_DEPLOY="${FOLIO_SCRIBE_WEB_DEPLOY:-}"
 WEB_WATCH="${FOLIO_SCRIBE_WEB_WATCH:-}"
 WEB_SYNC_DEBOUNCE="${FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE:-8}"
-LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$HOME/Library/Logs/folio-scribe}"
+LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$VAULT/.logs}"
 VERCEL_PROJECT="${FOLIO_SCRIBE_VERCEL_PROJECT:-}"
 VERCEL_SCOPE="${FOLIO_SCRIBE_VERCEL_SCOPE:-}"
 VERCEL_TARGET="${FOLIO_SCRIBE_VERCEL_TARGET:-}"
@@ -68,21 +77,37 @@ Commands:
   status      Show current launchd status
 
 Options (install only):
-  --vault PATH       Obsidian vault path  (default: ~/Documents/Trading)
+  --vault PATH       Obsidian vault path  (default: ~/Documents/TradingNote)
   --skill-dir PATH   Skill directory path (default: auto-detected from script location)
 
 Environment:
   FOLIO_SCRIBE_VAULT      Alternative to --vault flag
-  FOLIO_SCRIBE_AI_CLI     AI CLI for scheduled generation (codex or claude; default: codex)
+  FOLIO_SCRIBE_AI_CLI     AI CLI for scheduled generation (claude or codex; default: claude)
   FOLIO_SCRIBE_AI_FALLBACK_CLI
                           Fallback CLI when the primary CLI fails
                           (auto, claude, codex, or none; default: auto)
   FOLIO_SCRIBE_AI_MODEL   Optional model override for the selected AI CLI
+  FOLIO_SCRIBE_CODEX_PROFILE
+                          Optional Codex profile for scheduled tasks
   FOLIO_SCRIBE_AI_TIMEOUT_SECONDS
                           Wall-clock timeout for each AI CLI call
                           (default: 300; 0 disables)
+  FOLIO_SCRIBE_DETERMINISTIC_FALLBACK
+                          Write a data-only fallback section when all AI CLIs fail
+                          (0 or 1; default: 1)
+  FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE
+                          IBKR account-data mode for US tasks
+                          (auto, plugin, gateway, off, required; default: auto)
+  FOLIO_SCRIBE_IBKR_HOST  IBKR Gateway/TWS host (default: 127.0.0.1)
+  FOLIO_SCRIBE_IBKR_PORT  IBKR Gateway/TWS port (default: 4001)
+  FOLIO_SCRIBE_IBKR_CLIENT_ID
+                          IBKR API client id (default: 91)
+  FOLIO_SCRIBE_IBKR_TIMEOUT
+                          IBKR connection timeout seconds (default: 45)
+  FOLIO_SCRIBE_IBKR_ACCOUNT
+                          Optional IBKR account id to request
   FOLIO_SCRIBE_LOG_DIR    launchd and runner log directory
-                          (default: ~/Library/Logs/folio-scribe)
+                          (default: <vault>/.logs)
   FOLIO_SCRIBE_WEB_EXPORT_DIR
                           Optional static web dashboard output directory
   FOLIO_SCRIBE_WEB_TITLE  Static web dashboard title
@@ -217,10 +242,19 @@ install_plist() {
         -e "s|__SKILL_DIR__|${SKILL_DIR}|g" \
         -e "s|__VAULT__|${VAULT}|g" \
         -e "s|__HOME__|${HOME}|g" \
+        -e "s|__LOGIN_USER__|${LOGIN_USER}|g" \
         -e "s|__AI_CLI__|${AI_CLI}|g" \
         -e "s|__AI_FALLBACK_CLI__|${AI_FALLBACK_CLI}|g" \
         -e "s|__AI_MODEL__|${AI_MODEL}|g" \
+        -e "s|__CODEX_PROFILE__|${CODEX_PROFILE}|g" \
         -e "s|__AI_TIMEOUT_SECONDS__|${AI_TIMEOUT_SECONDS}|g" \
+        -e "s|__DETERMINISTIC_FALLBACK__|${DETERMINISTIC_FALLBACK}|g" \
+        -e "s|__IBKR_SNAPSHOT_MODE__|${IBKR_SNAPSHOT_MODE}|g" \
+        -e "s|__IBKR_HOST__|${IBKR_HOST}|g" \
+        -e "s|__IBKR_PORT__|${IBKR_PORT}|g" \
+        -e "s|__IBKR_CLIENT_ID__|${IBKR_CLIENT_ID}|g" \
+        -e "s|__IBKR_TIMEOUT__|${IBKR_TIMEOUT}|g" \
+        -e "s|__IBKR_ACCOUNT__|${IBKR_ACCOUNT}|g" \
         -e "s|__WEB_EXPORT_DIR__|${WEB_EXPORT_DIR}|g" \
         -e "s|__WEB_TITLE__|${WEB_TITLE}|g" \
         -e "s|__WEB_DEPLOY__|${WEB_DEPLOY}|g" \
@@ -283,8 +317,13 @@ do_install() {
     echo "  Skill dir: $SKILL_DIR"
     echo "  AI CLI:    $AI_CLI"
     echo "  Fallback:  $AI_FALLBACK_CLI"
+    echo "  AI backup: deterministic=$DETERMINISTIC_FALLBACK"
+    echo "  IBKR:      $IBKR_SNAPSHOT_MODE $IBKR_HOST:$IBKR_PORT client_id=$IBKR_CLIENT_ID"
     if [ -n "$AI_MODEL" ]; then
         echo "  AI model:  $AI_MODEL"
+    fi
+    if [ -n "$CODEX_PROFILE" ]; then
+        echo "  Codex cfg: $CODEX_PROFILE"
     fi
     if [ -n "$WEB_EXPORT_DIR" ]; then
         echo "  Web out:   $WEB_EXPORT_DIR"
@@ -327,6 +366,23 @@ do_install() {
     esac
     case "$AI_TIMEOUT_SECONDS" in
         ""|*[!0-9]*) echo "ERROR: FOLIO_SCRIBE_AI_TIMEOUT_SECONDS must be a non-negative integer"; exit 1 ;;
+    esac
+    case "$(printf '%s' "$DETERMINISTIC_FALLBACK" | tr '[:upper:]' '[:lower:]')" in
+        0|false|no|off|1|true|yes|on) ;;
+        *) echo "ERROR: FOLIO_SCRIBE_DETERMINISTIC_FALLBACK must be 0 or 1"; exit 1 ;;
+    esac
+    case "$(printf '%s' "$IBKR_SNAPSHOT_MODE" | tr '[:upper:]' '[:lower:]')" in
+        plugin|auto|gateway|off|required) ;;
+        *) echo "ERROR: Unsupported FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE '$IBKR_SNAPSHOT_MODE'. Use: plugin|gateway|off|required"; exit 1 ;;
+    esac
+    case "$IBKR_PORT" in
+        ""|*[!0-9]*) echo "ERROR: FOLIO_SCRIBE_IBKR_PORT must be a positive integer"; exit 1 ;;
+    esac
+    case "$IBKR_CLIENT_ID" in
+        ""|*[!0-9]*) echo "ERROR: FOLIO_SCRIBE_IBKR_CLIENT_ID must be a positive integer"; exit 1 ;;
+    esac
+    case "$IBKR_TIMEOUT" in
+        ""|*[!0-9]*) echo "ERROR: FOLIO_SCRIBE_IBKR_TIMEOUT must be a positive integer"; exit 1 ;;
     esac
     if web_watch_enabled && [ -z "$WEB_EXPORT_DIR" ]; then
         echo "ERROR: FOLIO_SCRIBE_WEB_WATCH=1 requires FOLIO_SCRIBE_WEB_EXPORT_DIR"
