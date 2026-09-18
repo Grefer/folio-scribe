@@ -19,8 +19,10 @@
 #   1. Skip sessions that do not map to an open market day
 #   2. Ensure Futu OpenD is running (auto-launch if needed)
 #   3. Read the Futu snapshot directly in this runner
-#   4. Invoke the configured AI CLI in text-only mode with inline Folio Scribe instructions
-#   5. Write the generated section into the daily note
+#   4. For US tasks, read IBKR through the connected app when Codex is selected,
+#      or through the local read-only Gateway/TWS helper when Claude is selected
+#   5. Invoke the configured AI CLI in text-only mode with inline Folio Scribe instructions
+#   6. Write the generated section into the daily note
 
 set -euo pipefail
 
@@ -31,14 +33,23 @@ fi
 
 # ── Configuration (override via environment variables) ───────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/Trading}"
+VAULT="${FOLIO_SCRIBE_VAULT:-$HOME/Documents/TradingNote}"
 NOTE_DATE_OVERRIDE="${FOLIO_SCRIBE_NOTE_DATE:-}"
 OPEND_APP="${FOLIO_SCRIBE_OPEND_APP:-$HOME/Applications/Futu_OpenD/FutuOpenD.app}"
 OPEND_PORT="${FOLIO_SCRIBE_OPEND_PORT:-11111}"
-AI_CLI="${FOLIO_SCRIBE_AI_CLI:-codex}"
+IBKR_SNAPSHOT_MODE="${FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE:-auto}"  # auto | plugin | gateway | off | required
+IBKR_SNAPSHOT_MODE=$(printf '%s' "$IBKR_SNAPSHOT_MODE" | tr '[:upper:]' '[:lower:]')
+IBKR_HOST="${FOLIO_SCRIBE_IBKR_HOST:-127.0.0.1}"
+IBKR_PORT="${FOLIO_SCRIBE_IBKR_PORT:-4001}"
+IBKR_CLIENT_ID="${FOLIO_SCRIBE_IBKR_CLIENT_ID:-91}"
+IBKR_TIMEOUT="${FOLIO_SCRIBE_IBKR_TIMEOUT:-45}"
+IBKR_ACCOUNT="${FOLIO_SCRIBE_IBKR_ACCOUNT:-}"
+AI_CLI="${FOLIO_SCRIBE_AI_CLI:-claude}"
 AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
 AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-auto}"
 AI_FALLBACK_CLI=$(printf '%s' "$AI_FALLBACK_CLI" | tr '[:upper:]' '[:lower:]')
+DETERMINISTIC_FALLBACK="${FOLIO_SCRIBE_DETERMINISTIC_FALLBACK:-1}"
+DETERMINISTIC_FALLBACK=$(printf '%s' "$DETERMINISTIC_FALLBACK" | tr '[:upper:]' '[:lower:]')
 CLAUDE="${FOLIO_SCRIBE_CLAUDE:-$(command -v claude 2>/dev/null || echo /opt/homebrew/bin/claude)}"
 CLAUDE_SETTINGS="${FOLIO_SCRIBE_CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
 CLAUDE_BARE="${FOLIO_SCRIBE_CLAUDE_BARE:-0}"
@@ -47,7 +58,7 @@ CODEX="${FOLIO_SCRIBE_CODEX:-$(command -v codex 2>/dev/null || echo /opt/homebre
 CODEX_CONFIG="${FOLIO_SCRIBE_CODEX_CONFIG:-$HOME/.codex/config.toml}"
 CODEX_PROFILE="${FOLIO_SCRIBE_CODEX_PROFILE:-}"
 CODEX_SANDBOX="${FOLIO_SCRIBE_CODEX_SANDBOX:-read-only}"
-CODEX_DISABLE_FEATURES="${FOLIO_SCRIBE_CODEX_DISABLE_FEATURES:-plugins apps}"
+CODEX_DISABLE_FEATURES="${FOLIO_SCRIBE_CODEX_DISABLE_FEATURES:-plugins}"
 CC_SWITCH_DB="${FOLIO_SCRIBE_CC_SWITCH_DB:-$HOME/.cc-switch/cc-switch.db}"
 WEB_EXPORT_DIR="${FOLIO_SCRIBE_WEB_EXPORT_DIR:-}"
 WEB_TITLE="${FOLIO_SCRIBE_WEB_TITLE:-Folio Scribe Journal}"
@@ -61,7 +72,7 @@ PLAN_PHASE=$(printf '%s' "$PLAN_PHASE" | tr '[:upper:]' '[:lower:]')
 ALLOW_NON_TRADING_DAY="${FOLIO_SCRIBE_ALLOW_NON_TRADING_DAY:-0}"
 ALLOW_NON_TRADING_DAY=$(printf '%s' "$ALLOW_NON_TRADING_DAY" | tr '[:upper:]' '[:lower:]')
 LANG_PREF="${FOLIO_SCRIBE_LANG:-zh}"   # zh | en
-LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$HOME/Library/Logs/folio-scribe}"
+LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$VAULT/.logs}"
 MAX_OPEND_WAIT=90
 MAX_SNAPSHOT_READY_WAIT="${FOLIO_SCRIBE_SNAPSHOT_READY_WAIT:-60}"
 SNAPSHOT_READY_INTERVAL="${FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL:-5}"
@@ -134,11 +145,27 @@ case "$AI_FALLBACK_CLI" in
     *) echo "ERROR: Unsupported FOLIO_SCRIBE_AI_FALLBACK_CLI '$AI_FALLBACK_CLI'. Use: auto|claude|codex|none"; exit 1 ;;
 esac
 
+case "$DETERMINISTIC_FALLBACK" in
+    0|false|no|off|"") DETERMINISTIC_FALLBACK=0 ;;
+    1|true|yes|on) DETERMINISTIC_FALLBACK=1 ;;
+    *) echo "ERROR: Unsupported FOLIO_SCRIBE_DETERMINISTIC_FALLBACK '$DETERMINISTIC_FALLBACK'. Use: 0|1"; exit 1 ;;
+esac
+
+case "$IBKR_SNAPSHOT_MODE" in
+    plugin|auto|gateway|off|required) ;;
+    *) echo "ERROR: Unsupported FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE '$IBKR_SNAPSHOT_MODE'. Use: plugin|gateway|off|required"; exit 1 ;;
+esac
+
 case "$CLAUDE_BARE" in
     0|false|no|off|"") ;;
     1|true|yes|on) ;;
     *) echo "ERROR: Unsupported FOLIO_SCRIBE_CLAUDE_BARE '$CLAUDE_BARE'. Use: 0|1"; exit 1 ;;
 esac
+
+uses_ibkr_plugin() {
+    [ "$IBKR_SNAPSHOT_MODE" = "plugin" ] \
+        || { [ "$IBKR_SNAPSHOT_MODE" = "auto" ] && [ "$AI_CLI" = "codex" ]; }
+}
 
 if [ -n "$AI_MODEL" ]; then
     AI_MODEL_LABEL="${AI_CLI}:${AI_MODEL}"
@@ -415,6 +442,120 @@ read_snapshot_json() {
     extract_snapshot_json "$raw_file" "$json_file"
 }
 
+write_ibkr_plugin_request_json() {
+    local json_file="$1"
+    python3 - "$json_file" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+payload = {
+    "captured_at": datetime.now(timezone.utc).isoformat(),
+    "account": None,
+    "accounts": {},
+    "positions": [],
+    "orders": [],
+    "fills": [],
+    "quotes": {},
+    "raw": {
+        "source": "ibkr_codex_app",
+        "readonly": True,
+        "trading_status": "agent_read_required",
+        "trading_error": (
+            "The scheduled Codex agent must call the connected IBKR app for "
+            "positions, account metrics, balances, live orders, and trades."
+        ),
+    },
+}
+Path(sys.argv[1]).write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
+PY
+}
+
+write_unavailable_ibkr_snapshot_json() {
+    local json_file="$1"
+    local error_file="$2"
+    python3 - "$json_file" "$error_file" "$IBKR_HOST" "$IBKR_PORT" "$IBKR_CLIENT_ID" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+json_file, error_file, host, port, client_id = sys.argv[1:6]
+error_text = Path(error_file).read_text(encoding="utf-8", errors="replace").strip()
+payload = {
+    "captured_at": datetime.now(timezone.utc).isoformat(),
+    "account": None,
+    "accounts": {},
+    "positions": [],
+    "orders": [],
+    "fills": [],
+    "quotes": {},
+    "raw": {
+        "source": "ibkr_tws_gateway",
+        "host": host,
+        "port": port,
+        "client_id": client_id,
+        "readonly": True,
+        "trading_status": "unavailable",
+        "trading_error": error_text or "IBKR snapshot command failed without stderr output.",
+    },
+}
+Path(json_file).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+PY
+}
+
+read_ibkr_snapshot_json() {
+    local json_file="$1"
+    shift || true
+    local raw_file error_file
+    local -a ibkr_args
+    raw_file=$(mktemp "$SENSITIVE_TMP_DIR/ibkr-snapshot-raw.XXXXXX")
+    error_file=$(mktemp "$SENSITIVE_TMP_DIR/ibkr-snapshot-error.XXXXXX")
+
+    if uses_ibkr_plugin; then
+        write_ibkr_plugin_request_json "$json_file"
+        return 0
+    fi
+
+    if [ "$IBKR_SNAPSHOT_MODE" = "off" ]; then
+        printf 'IBKR snapshot disabled by FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE=off.\n' > "$error_file"
+        write_unavailable_ibkr_snapshot_json "$json_file" "$error_file"
+        return 0
+    fi
+
+    ibkr_args=(
+        --host "$IBKR_HOST"
+        --port "$IBKR_PORT"
+        --client-id "$IBKR_CLIENT_ID"
+        --timeout "$IBKR_TIMEOUT"
+    )
+    if [ -n "$IBKR_ACCOUNT" ]; then
+        ibkr_args+=(--account "$IBKR_ACCOUNT")
+    fi
+
+    if python3 "$SCRIPT_DIR/read_ibkr_snapshot.py" "${ibkr_args[@]}" "$@" > "$raw_file" 2> "$error_file"; then
+        extract_snapshot_json "$raw_file" "$json_file"
+        return 0
+    fi
+
+    if [ "$IBKR_SNAPSHOT_MODE" = "required" ]; then
+        echo "ERROR: IBKR snapshot failed and FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE=required."
+        cat "$error_file"
+        return 1
+    fi
+
+    echo "WARNING: IBKR snapshot unavailable; continuing with Futu snapshot only."
+    if [ -s "$error_file" ]; then
+        echo "IBKR error excerpt:"
+        sed -n '1,12p' "$error_file"
+    fi
+    write_unavailable_ibkr_snapshot_json "$json_file" "$error_file"
+}
+
 snapshot_has_trade_data() {
     local json_file="$1"
     python3 - "$json_file" <<'PY'
@@ -471,6 +612,7 @@ read_initial_snapshot_when_ready() {
 
 SNAPSHOT_POSITIONS_JSON=$(mktemp "$SENSITIVE_TMP_DIR/positions.XXXXXX")
 SNAPSHOT_JSON_FILE=$(mktemp "$SENSITIVE_TMP_DIR/snapshot.XXXXXX")
+IBKR_SNAPSHOT_JSON_FILE=$(mktemp "$SENSITIVE_TMP_DIR/ibkr-snapshot.XXXXXX")
 AI_CONTENT_FILE=$(mktemp "$SENSITIVE_TMP_DIR/content.XXXXXX")
 
 echo "Reading Futu snapshot ..."
@@ -577,6 +719,37 @@ else
     cp "$SNAPSHOT_POSITIONS_JSON" "$SNAPSHOT_JSON_FILE"
 fi
 
+if [ "$MARKET_LABEL_EN" = "US" ]; then
+    if uses_ibkr_plugin; then
+        echo "Preparing direct IBKR app read for the scheduled Codex agent ..."
+    else
+        echo "Reading optional IBKR Gateway/TWS fallback snapshot ..."
+    fi
+    read_ibkr_snapshot_json "$IBKR_SNAPSHOT_JSON_FILE"
+else
+    python3 - "$IBKR_SNAPSHOT_JSON_FILE" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+payload = {
+    "captured_at": datetime.now(timezone.utc).isoformat(),
+    "account": None,
+    "accounts": {},
+    "positions": [],
+    "orders": [],
+    "fills": [],
+    "quotes": {},
+    "raw": {
+        "source": "ibkr_tws_gateway",
+        "trading_status": "not_used_for_market",
+    },
+}
+Path(sys.argv[1]).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+PY
+fi
+
 SNAPSHOT_CONTEXT=$(python3 - "$SNAPSHOT_JSON_FILE" "$MARKET_PREFIX" "$MARKET_LABEL_EN" "$TASK_TYPE" "$WATCHLIST_CANDIDATE_CSV" <<'PY'
 import json
 import sys
@@ -674,9 +847,10 @@ for position in positions:
     lines.append(
         "- "
         f"{value(position, 'symbol')} {value(position, 'name')} | "
-        f"qty={value(position, 'quantity')} | cost={value(position, 'cost')} | "
+        f"qty={value(position, 'quantity')} | diluted_cost={value(position, 'cost')} | "
         f"market_value={value(position, 'market_value')} {value(position, 'currency', '')} | "
-        f"unrealized_pnl={value(position, 'unrealized_pnl')} | realized_pnl={value(position, 'realized_pnl')}"
+        f"pnl_diluted_basis={value(position, 'unrealized_pnl')} | "
+        f"realized_pnl_reference={value(position, 'realized_pnl')}"
     )
 
 lines.append("")
@@ -684,8 +858,10 @@ lines.append(f"orders: {len(orders)}")
 for order in orders:
     lines.append(
         "- "
-        f"{value(order, 'symbol')} {value(order, 'side')} | "
+        f"{value(order, 'symbol')} {value(order, 'side')} | order_id={value(order, 'order_id')} | "
         f"qty={value(order, 'quantity')} | price={value(order, 'price')} | status={value(order, 'status')}"
+        f" | dealt_qty={value(order, 'filled_quantity')} | dealt_avg_price={value(order, 'filled_avg_price')}"
+        f" | created_at={value(order, 'submitted_at')}"
     )
 
 lines.append("")
@@ -693,7 +869,8 @@ lines.append(f"fills: {len(fills)}")
 for fill in fills:
     lines.append(
         "- "
-        f"{value(fill, 'symbol')} {value(fill, 'side')} | "
+        f"{value(fill, 'symbol')} {value(fill, 'side')} | deal_id={value(fill, 'deal_id')} | "
+        f"order_id={value(fill, 'order_id')} | "
         f"qty={value(fill, 'quantity')} | price={value(fill, 'price')} | at={value(fill, 'filled_at')}"
     )
 
@@ -714,6 +891,119 @@ for symbol in watchlist_candidates:
         lines.append(f"- {symbol} | quote unavailable in current snapshot")
         continue
     lines.append("- " + quote_line(symbol, quote))
+
+print("\n".join(lines))
+PY
+)
+
+IBKR_CONTEXT=$(python3 - "$IBKR_SNAPSHOT_JSON_FILE" "$MARKET_PREFIX" "$MARKET_LABEL_EN" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+market_prefix = sys.argv[2].upper()
+market_label = sys.argv[3]
+
+def value(item, key, default="-"):
+    current = item.get(key) if isinstance(item, dict) else None
+    return default if current is None or current == "" else str(current)
+
+def symbol_of(item):
+    return str(item.get("symbol") or "").upper()
+
+def is_target_market_symbol(symbol):
+    return str(symbol or "").upper().startswith(market_prefix)
+
+raw = payload.get("raw") or {}
+status = raw.get("trading_status", "-")
+lines = []
+lines.append(f"ibkr_source: {raw.get('source', '-')}")
+lines.append(f"ibkr_status: {status}")
+lines.append(f"captured_at: {payload.get('captured_at', '-')}")
+lines.append(f"managed_accounts: {', '.join(raw.get('managed_accounts') or []) or '-'}")
+
+if market_label != "US":
+    lines.append("(IBKR snapshot is not used for this non-US task.)")
+    print("\n".join(lines))
+    raise SystemExit
+
+if status == "agent_read_required":
+    lines.append(
+        "ibkr_action: Call the connected IBKR app now; do not use this marker "
+        "as evidence of an empty account."
+    )
+    print("\n".join(lines))
+    raise SystemExit
+
+if status not in {"ok"}:
+    lines.append(f"ibkr_error: {raw.get('trading_error', '-')}")
+    print("\n".join(lines))
+    raise SystemExit
+
+accounts = payload.get("accounts") or {}
+lines.append("")
+lines.append("accounts:")
+if not accounts:
+    lines.append("- (No IBKR account summary available.)")
+for account_id, account in accounts.items():
+    lines.append(
+        "- "
+        f"{account_id} | total_assets={value(account, 'total_assets')} {value(account, 'currency', '')} | "
+        f"cash={value(account, 'cash')} | buying_power={value(account, 'buying_power')} | "
+        f"leverage={value(account, 'leverage')}"
+    )
+
+positions = [
+    item for item in payload.get("positions", [])
+    if is_target_market_symbol(symbol_of(item))
+]
+orders = [
+    item for item in payload.get("orders", [])
+    if is_target_market_symbol(symbol_of(item))
+]
+fills = [
+    item for item in payload.get("fills", [])
+    if is_target_market_symbol(symbol_of(item))
+]
+
+lines.append("")
+lines.append("positions:")
+if not positions:
+    lines.append("- (No IBKR US positions in snapshot.)")
+for position in positions:
+    raw_position = position.get("raw") or {}
+    lines.append(
+        "- "
+        f"{value(position, 'symbol')} {value(position, 'name')} | "
+        f"account={value(raw_position, 'account')} | qty={value(position, 'quantity')} | "
+        f"avg_cost={value(position, 'cost')} | market_value={value(position, 'market_value')} {value(position, 'currency', '')} | "
+        f"unrealized_pnl={value(position, 'unrealized_pnl')} | realized_pnl={value(position, 'realized_pnl')}"
+    )
+
+lines.append("")
+lines.append(f"orders: {len(orders)}")
+for order in orders:
+    raw_order = order.get("raw") or {}
+    lines.append(
+        "- "
+        f"{value(order, 'symbol')} {value(order, 'side')} | account={value(raw_order, 'account')} | "
+        f"order_id={value(order, 'order_id')} | order_type={value(raw_order, 'order_type')} | "
+        f"qty={value(order, 'quantity')} | price={value(order, 'price')} | status={value(order, 'status')} | "
+        f"filled_qty={value(order, 'filled_quantity')} | filled_avg_price={value(order, 'filled_avg_price')}"
+    )
+
+lines.append("")
+lines.append(f"fills: {len(fills)}")
+for fill in fills:
+    raw_fill = fill.get("raw") or {}
+    lines.append(
+        "- "
+        f"{value(fill, 'symbol')} {value(fill, 'side')} | account={value(raw_fill, 'account')} | "
+        f"deal_id={value(fill, 'deal_id')} | order_id={value(fill, 'order_id')} | "
+        f"qty={value(fill, 'quantity')} | price={value(fill, 'price')} | at={value(fill, 'filled_at')}"
+    )
 
 print("\n".join(lines))
 PY
@@ -827,9 +1117,17 @@ PY
 
 # ── Common prompt suffix ─────────────────────────────────────────────
 if [ "$LANG_PREF" = "en" ]; then
-    PROMPT_SUFFIX="Output only the Markdown body for the target section. Do not include the second-level section heading, frontmatter, code fences, shell commands, or any tool-use instructions. The runner has already read data and will write the note after your response."
+    if [ "$MARKET_LABEL_EN" = "US" ] && uses_ibkr_plugin; then
+        PROMPT_SUFFIX="Before writing, call the connected Interactive Brokers (IBKR) app for open positions, account metrics, currency balances, live orders, and trades for the relevant session. Use those calls as the source of truth for the IBKR account. For every IBKR-held symbol that is missing a current quote in the supplied Futu summary, run the read-only helper \`python3 ${SCRIPT_DIR}/read_futu_snapshot.py <US.SYMBOL...> --quotes-only\` and use its OpenD result for quotes and triggers; never substitute an unsubscribed or delayed IBKR quote as a precise trigger. Output only the Markdown body for the target section. Do not include the second-level section heading, frontmatter, code fences, shell commands, or tool-use narration. The runner will write the note after your response."
+    else
+        PROMPT_SUFFIX="Output only the Markdown body for the target section. Do not include the second-level section heading, frontmatter, code fences, shell commands, or any tool-use instructions. The runner has already read data and will write the note after your response."
+    fi
 else
-    PROMPT_SUFFIX="只输出目标 section 的 Markdown 正文。不要包含二级标题、frontmatter、代码围栏、shell 命令或任何工具调用说明。数据已由 runner 读取，写入也会由 runner 在你回复后完成。"
+    if [ "$MARKET_LABEL_EN" = "US" ] && uses_ibkr_plugin; then
+        PROMPT_SUFFIX="生成正文前，必须调用已连接的 Interactive Brokers（IBKR）插件，动态读取当前持仓、账户指标、分币种余额、未成交订单，以及对应交易时段的成交。IBKR 账户事实以插件结果为准。对插件返回但 runner 的 Futu 摘要中缺少当前行情的每个持仓代码，必须运行只读命令 \`python3 ${SCRIPT_DIR}/read_futu_snapshot.py <US.代码...> --quotes-only\` 补拉 OpenD 行情，并用该结果制定价格触发；不得把 IBKR 未订阅或延迟行情当作精确触发价。只输出目标 section 的 Markdown 正文，不要包含二级标题、frontmatter、代码围栏、shell 命令或工具调用过程。写入会由 runner 在你回复后完成。"
+    else
+        PROMPT_SUFFIX="只输出目标 section 的 Markdown 正文。不要包含二级标题、frontmatter、代码围栏、shell 命令或任何工具调用说明。数据已由 runner 读取，写入也会由 runner 在你回复后完成。"
+    fi
 fi
 
 # ── Build /folio-scribe prompt ───────────────────────────────────────
@@ -851,7 +1149,10 @@ market_scope_zh() {
 - 如果快照里没有目标市场持仓或订单，只写“无目标市场持仓/订单”，不要用另一个市场补充内容。
 - “推荐关注清单”不是当前持仓清单；watchlist_candidates 来自 Futu 最新行情动态筛选，必须让 AI 从这些非持仓候选里直接选择。
 - 推荐关注清单必须同时列出标的代码和股票名称；名称来自 watchlist_candidates，缺失时写“-”。
+- 持仓数量、摊薄成本、市值和盈亏必须以 positions 为准；orders/fills 只用于解释执行过程，不得用订单列表手工反推或覆盖 positions 的最终持仓。
+- positions 中 diluted_cost 是 Futu 摊薄成本口径；pnl_diluted_basis 是配套盈亏口径，不要写成平均成本口径的未实现盈亏。
 - 美股计划里的 latest 字段已经按当前交易阶段选择：盘前优先 pre_price；regular_close 只是上一常规盘收盘价，不能当作盘前最新价。
+- 美股任务必须通过已连接的 IBKR 插件动态读取账户持仓、成本、订单、成交、余额和保证金；插件结果是 IBKR 账户事实源。Futu OpenD 主要用于实时/盘前盘后行情、触发价和候选观察标的。不要把两个券商的持仓混为同一账户；不要因为本地 Gateway 关闭而把 IBKR 持仓写成空仓。
 - 当前持仓、已有期权和已有订单只放在“当前持仓/标的计划/期权计划”里，不要列入推荐关注清单；如果没有候选行情，保留表头并说明“无候选标的数据”。
 - 推荐关注清单只用于后续观察，不是买入建议。
 EOF
@@ -866,7 +1167,10 @@ Market isolation rules:
 - If the snapshot has no target-market positions or orders, say so directly and do not fill the gap with the other market.
 - The recommended watchlist is not the current position list; watchlist_candidates are dynamically scanned from the latest Futu market data, and the AI must select directly from these non-held candidates.
 - The recommended watchlist must include both symbol and stock name; use the name from watchlist_candidates, or "-" when unavailable.
+- Position quantity, diluted cost, market value, and P/L must come from positions. Use orders/fills only to explain execution; do not manually net orders to override final positions.
+- In positions, diluted_cost is Futu's diluted-cost basis; pnl_diluted_basis is the paired P/L basis. Do not describe it as average-cost unrealized P/L.
 - For US plans, the latest field is already session-aware: pre-market uses pre_price first. regular_close is only the prior regular-session close and must not be treated as the current pre-market price.
+- For US tasks, dynamically read positions, cost basis, orders, trades, balances, and margin from the connected IBKR app; its response is the source of truth for the IBKR account. Use Futu OpenD primarily for live and extended-hours quotes, triggers, and watchlist candidates. Do not merge the two brokers, and do not report the IBKR account as empty merely because local Gateway is closed.
 - Current positions, existing options, and working orders belong only in the positions/instrument/option sections. Do not list them in the recommended watchlist unless no candidate quotes are available, in which case keep the table header and state that candidate data is unavailable.
 - Watchlist candidates are for observation only, not buy recommendations.
 EOF
@@ -894,7 +1198,7 @@ format_template_zh() {
 
 ### 当前港股持仓
 
-| 标的 | 名称 | 数量 | 成本 | 现价 | 市值 | 浮动盈亏 |
+| 标的 | 名称 | 数量 | 摊薄成本 | 现价 | 市值 | 盈亏 |
 |------|------|------|------|------|------|----------|
 
 ### 港股开盘前盘面
@@ -986,7 +1290,7 @@ EOF
             ;;
         us_plan)
             cat <<'EOF'
-**数据源：Futu OpenD 美股盘前快照 | 生成时间：YYYY-MM-DD HH:mm HKT**
+**数据源：Futu OpenD 行情 + IBKR 插件账户数据 | 生成时间：YYYY-MM-DD HH:mm HKT**
 
 ---
 
@@ -1002,7 +1306,7 @@ EOF
 
 ### 当前美股持仓
 
-| 标的 | 名称 | 数量 | 成本 | 盘前/快照价 | 市值 | 浮动盈亏 |
+| 标的 | 名称 | 数量 | 摊薄成本 | 盘前/快照价 | 市值 | 盈亏 |
 |------|------|------|------|-------------|------|----------|
 
 ### 美股盘前盘面
@@ -1039,7 +1343,7 @@ EOF
             ;;
         us_review)
             cat <<'EOF'
-**数据源：Futu OpenD 美股盘后快照 | 生成时间：YYYY-MM-DD HH:mm HKT**
+**数据源：Futu OpenD 行情 + IBKR 插件账户数据 | 生成时间：YYYY-MM-DD HH:mm HKT**
 
 ---
 
@@ -1094,7 +1398,7 @@ format_template_en() {
 
 ### Current HK Positions
 
-| Symbol | Name | Quantity | Cost | Price | Market Value | Unrealized P/L |
+| Symbol | Name | Quantity | Diluted Cost | Price | Market Value | P/L |
 |--------|------|----------|------|-------|--------------|----------------|
 
 ### HK Pre-Market Setup
@@ -1156,7 +1460,7 @@ EOF
             ;;
         us_plan)
             cat <<'EOF'
-**Data source: Futu OpenD US pre-market snapshot | Generated: YYYY-MM-DD HH:mm HKT**
+**Data source: Futu OpenD quotes + IBKR app account data | Generated: YYYY-MM-DD HH:mm HKT**
 
 ---
 
@@ -1167,7 +1471,7 @@ EOF
 
 ### Current US Positions
 
-| Symbol | Name | Quantity | Cost | Pre-Market/Snapshot Price | Market Value | Unrealized P/L |
+| Symbol | Name | Quantity | Diluted Cost | Pre-Market/Snapshot Price | Market Value | P/L |
 |--------|------|----------|------|---------------------------|--------------|----------------|
 
 ### US Pre-Market Setup
@@ -1189,7 +1493,7 @@ EOF
             ;;
         us_review)
             cat <<'EOF'
-**Data source: Futu OpenD US post-close snapshot | Generated: YYYY-MM-DD HH:mm HKT**
+**Data source: Futu OpenD quotes + IBKR app account data | Generated: YYYY-MM-DD HH:mm HKT**
 
 ---
 
@@ -1279,7 +1583,7 @@ EOF
             body=$(cat <<EOF
 Folio Scribe 定时任务：生成美股交易计划。
 
-任务：基于下面的 Futu OpenD JSON 快照和已有 Daily 笔记，生成 ${NOTE_DATE} 的美股交易计划，中文输出。
+任务：基于下面的 Futu OpenD 行情、动态调用的 IBKR 插件账户数据以及已有 Daily 笔记，生成 ${NOTE_DATE} 的美股交易计划，中文输出。
 
 计划阶段：${US_PLAN_PHASE_LABEL_ZH}
 阶段要求：${US_PLAN_PHASE_GUIDANCE_ZH}
@@ -1296,6 +1600,9 @@ ${format_template}
 Futu OpenD 摘要：
 ${SNAPSHOT_CONTEXT}
 
+IBKR 插件/备用入口状态：
+${IBKR_CONTEXT}
+
 交易规则与长期策略：
 ${RULES_CONTEXT}
 
@@ -1308,7 +1615,7 @@ EOF
             body=$(cat <<EOF
 Folio Scribe 定时任务：生成美股交易总结。
 
-任务：基于下面的 Futu OpenD JSON 快照和已有 Daily/${NOTE_DATE}.md，生成美股交易总结，写入 ${NOTE_DATE}.md 对应的美股交易日期，中文输出。
+任务：基于下面的 Futu OpenD 行情、动态调用的 IBKR 插件账户数据以及已有 Daily/${NOTE_DATE}.md，生成美股交易总结，写入 ${NOTE_DATE}.md 对应的美股交易日期，中文输出。
 
 要求：先读取并遵守下面的交易规则与长期策略。纪律评分必须同时比较 Daily 计划和长期策略；如果后续用户规则更新覆盖了早盘计划，应说明覆盖关系，而不是直接判为纪律失败。包含账户和持仓变化、成交与计划对照、纪律评分、错过机会、风险漂移、下一交易时段触发价。只做复盘和日志内容，不提出自动下单、改单或撤单。中文输出。
 
@@ -1321,6 +1628,9 @@ ${format_template}
 
 Futu OpenD 摘要：
 ${SNAPSHOT_CONTEXT}
+
+IBKR 插件/备用入口状态：
+${IBKR_CONTEXT}
 
 交易规则与长期策略：
 ${RULES_CONTEXT}
@@ -1395,7 +1705,7 @@ EOF
             body=$(cat <<EOF
 Folio Scribe scheduled task: generate US trading plan.
 
-Task: generate the US trading plan for ${NOTE_DATE} from the Futu OpenD JSON snapshot and existing Daily note below.
+Task: generate the US trading plan for ${NOTE_DATE} from the supplied Futu OpenD quotes, dynamically retrieved IBKR app account data, and the existing Daily note below.
 
 Plan phase: ${US_PLAN_PHASE_LABEL_EN}
 Phase requirements: ${US_PLAN_PHASE_GUIDANCE_EN}
@@ -1412,6 +1722,9 @@ ${format_template}
 Futu OpenD summary:
 ${SNAPSHOT_CONTEXT}
 
+IBKR app/fallback source status:
+${IBKR_CONTEXT}
+
 Standing trading rules and strategy mandates:
 ${RULES_CONTEXT}
 
@@ -1424,7 +1737,7 @@ EOF
             body=$(cat <<EOF
 Folio Scribe scheduled task: generate US trading review.
 
-Task: generate the US trading review for the US session date ${NOTE_DATE} from the Futu OpenD JSON snapshot and existing Daily note below.
+Task: generate the US trading review for the US session date ${NOTE_DATE} from the supplied Futu OpenD quotes, dynamically retrieved IBKR app account data, and the existing Daily note below.
 
 Requirements: read and apply the standing trading rules and strategy mandates below first. Include account and position changes, fills versus plan, discipline assessment, missed opportunities, risk drift, and next-session triggers. Compare decisions against the previous evening US plan and standing rules. Output in English.
 
@@ -1437,6 +1750,9 @@ ${format_template}
 
 Futu OpenD summary:
 ${SNAPSHOT_CONTEXT}
+
+IBKR app/fallback source status:
+${IBKR_CONTEXT}
 
 Standing trading rules and strategy mandates:
 ${RULES_CONTEXT}
@@ -1469,6 +1785,287 @@ except subprocess.TimeoutExpired:
     print(f"ERROR: command timed out after {timeout}s: {cmd[0]}", file=sys.stderr)
     raise SystemExit(124)
 ' "$AI_TIMEOUT_SECONDS" "$@"
+}
+
+print_cli_failure_excerpt() {
+    local path="$1"
+    python3 - "$path" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit
+
+lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+for index, line in enumerate(lines[:120], start=1):
+    print(line)
+    if line.strip() == "user":
+        print("[prompt body redacted by runner]")
+        break
+if len(lines) > 120:
+    print("[output truncated by runner]")
+PY
+}
+
+write_deterministic_fallback_section() {
+    if [ "$DETERMINISTIC_FALLBACK" != "1" ]; then
+        return 1
+    fi
+
+    echo "WARNING: AI CLIs failed; writing deterministic data-only fallback section."
+    python3 - \
+        "$TASK_TYPE" \
+        "$NOTE_DATE" \
+        "$MARKET_LABEL_ZH" \
+        "$MARKET_LABEL_EN" \
+        "$MARKET_PREFIX" \
+        "$SNAPSHOT_JSON_FILE" \
+        "$IBKR_SNAPSHOT_JSON_FILE" \
+        "$AI_CONTENT_FILE" \
+        "$LANG_PREF" <<'PY'
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
+
+task_type, note_date, market_zh, market_en, market_prefix, futu_path, ibkr_path, out_path, lang = sys.argv[1:10]
+is_zh = lang != "en"
+market_prefix = market_prefix.upper()
+
+def load_json(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8", errors="replace"))
+    except Exception as exc:
+        return {
+            "captured_at": "",
+            "account": None,
+            "accounts": {},
+            "positions": [],
+            "orders": [],
+            "fills": [],
+            "quotes": {},
+            "raw": {"trading_status": "unavailable", "trading_error": str(exc)},
+        }
+
+futu = load_json(futu_path)
+ibkr = load_json(ibkr_path)
+
+def value(item, key=None, default="-"):
+    if key is not None:
+        item = item.get(key) if isinstance(item, dict) else None
+    if item is None or item == "":
+        return default
+    return str(item)
+
+def symbol_of(item):
+    return str(item.get("symbol") or "").upper()
+
+def in_market(item):
+    return symbol_of(item).startswith(market_prefix)
+
+def table(headers, rows):
+    output = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
+    if rows:
+        output.extend("| " + " | ".join(str(cell) for cell in row) + " |" for row in rows)
+    else:
+        output.append("| - | " + " | ".join(["-"] * (len(headers) - 1)) + " |")
+    return "\n".join(output)
+
+def account_rows(source, payload):
+    rows = []
+    account = payload.get("account") or {}
+    if account:
+        rows.append([
+            source,
+            value(account, "total_assets"),
+            value(account, "cash"),
+            value(account, "buying_power"),
+            value(account, "leverage"),
+            value(account, "currency"),
+        ])
+    accounts = payload.get("accounts") or {}
+    for account_id, item in accounts.items():
+        rows.append([
+            f"{source}:{account_id}",
+            value(item, "total_assets"),
+            value(item, "cash"),
+            value(item, "buying_power"),
+            value(item, "leverage"),
+            value(item, "currency"),
+        ])
+    return rows
+
+def position_rows(source, payload):
+    rows = []
+    for item in payload.get("positions") or []:
+        if not in_market(item):
+            continue
+        rows.append([
+            source,
+            value(item, "symbol"),
+            value(item, "name"),
+            value(item, "quantity"),
+            value(item, "cost"),
+            value(item, "market_value"),
+            value(item, "unrealized_pnl"),
+        ])
+    return rows
+
+def order_rows(source, payload):
+    rows = []
+    for item in payload.get("orders") or []:
+        if not in_market(item):
+            continue
+        rows.append([
+            source,
+            value(item, "symbol"),
+            value(item, "side"),
+            value(item, "quantity"),
+            value(item, "price"),
+            value(item, "status"),
+            value(item, "filled_quantity"),
+        ])
+    return rows
+
+def fill_rows(source, payload):
+    rows = []
+    for item in payload.get("fills") or []:
+        if not in_market(item):
+            continue
+        rows.append([
+            source,
+            value(item, "symbol"),
+            value(item, "side"),
+            value(item, "quantity"),
+            value(item, "price"),
+            value(item, "filled_at"),
+        ])
+    return rows
+
+def quote_rows(payload, limit=8):
+    rows = []
+    held = {symbol_of(item) for item in payload.get("positions") or [] if in_market(item)}
+    for symbol, quote in (payload.get("quotes") or {}).items():
+        symbol = str(symbol).upper()
+        if not symbol.startswith(market_prefix) or symbol in held:
+            continue
+        rows.append([
+            symbol,
+            value(quote, "name"),
+            value(quote, "price"),
+            value(quote, "quote_time"),
+        ])
+        if len(rows) >= limit:
+            break
+    return rows
+
+generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+is_plan = task_type.endswith("_plan")
+title = "自动保底计划" if is_plan else "自动保底总结"
+if not is_zh:
+    title = "Data-only fallback plan" if is_plan else "Data-only fallback review"
+
+account = account_rows("Futu", futu)
+if market_en == "US":
+    account.extend(account_rows("IBKR", ibkr))
+
+positions = position_rows("Futu", futu)
+if market_en == "US":
+    positions.extend(position_rows("IBKR", ibkr))
+
+orders = order_rows("Futu", futu)
+fills = fill_rows("Futu", futu)
+if market_en == "US":
+    orders.extend(order_rows("IBKR", ibkr))
+    fills.extend(fill_rows("IBKR", ibkr))
+
+ibkr_status = value(ibkr.get("raw") or {}, "trading_status")
+ibkr_error = value(ibkr.get("raw") or {}, "trading_error")
+
+if is_zh:
+    lines = [
+        f"**数据源：Futu OpenD 结构化快照" + (" + IBKR 账户数据入口" if market_en == "US" else "") + f" | 生成时间：{generated_at} 本地时间**",
+        "",
+        "> **生成状态**：AI CLI 未返回可用正文，本节由 runner 自动写入，仅用于数据留痕和人工复核；不要把本节视为新增交易建议。",
+        "",
+        f"### {market_zh}账户快照",
+        "",
+        table(["来源", "总资产", "现金", "购买力", "杠杆", "币种"], account),
+        "",
+    ]
+    if market_en == "US":
+        lines.extend([
+            f"> IBKR 状态：{ibkr_status}" + (f"；错误：{ibkr_error}" if ibkr_status != "ok" else ""),
+            "",
+        ])
+    lines.extend([
+        f"### 当前{market_zh}持仓",
+        "",
+        table(["来源", "标的", "名称", "数量", "成本口径", "市值", "盈亏"], positions),
+        "",
+        "### 工作订单",
+        "",
+        table(["来源", "标的", "方向", "数量", "价格", "状态", "已成交"], orders),
+        "",
+        "### 今日成交",
+        "",
+        table(["来源", "标的", "方向", "数量", "价格", "时间"], fills),
+        "",
+        "### 推荐关注清单",
+        "",
+        "AI 未完成筛选；以下仅列出快照中的非持仓候选行情，需人工复核后再使用。",
+        "",
+        table(["标的", "名称", "最新价", "时间"], quote_rows(futu)),
+        "",
+        f"### {title}",
+        "",
+    ])
+    if is_plan:
+        lines.extend([
+            "- 新增交易：暂停，等待 AI 或人工复核后再执行。",
+            "- 已有持仓：只按既有规则和已记录触发条件处理。",
+            "- 风险控制：不扩大未被当前计划覆盖的敞口，不临时追加复杂期权结构。",
+        ])
+    else:
+        lines.extend([
+            "- 本节未完成 AI 复盘，不给纪律评分。",
+            "- 请用上方订单和成交表核对实际执行，再补充计划符合度、纪律问题和下一交易日触发条件。",
+            "- 如有成交但快照未显示，请优先以券商成交记录为准补记。",
+        ])
+else:
+    lines = [
+        f"**Data source: Futu OpenD structured snapshot" + (" + IBKR account-data source" if market_en == "US" else "") + f" | Generated: {generated_at} local time**",
+        "",
+        "> **Generation status**: AI CLI did not return usable content. The runner wrote this data-only fallback for auditability; do not treat it as new trading advice.",
+        "",
+        f"### {market_en} Account Snapshot",
+        "",
+        table(["Source", "Assets", "Cash", "Buying power", "Leverage", "Currency"], account),
+        "",
+        f"### Current {market_en} Positions",
+        "",
+        table(["Source", "Symbol", "Name", "Qty", "Cost basis", "Market value", "P/L"], positions),
+        "",
+        "### Working Orders",
+        "",
+        table(["Source", "Symbol", "Side", "Qty", "Price", "Status", "Filled"], orders),
+        "",
+        "### Fills",
+        "",
+        table(["Source", "Symbol", "Side", "Qty", "Price", "Time"], fills),
+        "",
+        f"### {title}",
+        "",
+        "- No new action should be taken from this fallback section.",
+        "- Re-run with a healthy AI CLI or complete the review manually from the broker records.",
+    ]
+
+Path(out_path).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+PY
 }
 
 configured_codex_model() {
@@ -1511,7 +2108,13 @@ resolved_fallback_cli() {
             printf ''
             ;;
         auto)
-            if [ "$AI_CLI" = "codex" ]; then
+            if [ "$MARKET_LABEL_EN" = "US" ] \
+                && uses_ibkr_plugin \
+                && [ "$AI_CLI" = "codex" ]; then
+                # Claude cannot access the connected Codex app. A data-only
+                # fallback is safer than writing a false empty IBKR account.
+                printf ''
+            elif [ "$AI_CLI" = "codex" ]; then
                 printf 'claude'
             else
                 printf 'codex'
@@ -1585,7 +2188,7 @@ run_claude_cli() {
         echo "ERROR: Claude CLI failed (exit $status)."
         if [ -s "$claude_json" ]; then
             echo "Claude output before failure:"
-            sed -n '1,120p' "$claude_json"
+            print_cli_failure_excerpt "$claude_json"
         fi
         return "$status"
     fi
@@ -1626,7 +2229,7 @@ PY
         echo "ERROR: Claude JSON output could not be used."
         if [ -s "$claude_json" ]; then
             echo "Claude output:"
-            sed -n '1,120p' "$claude_json"
+            print_cli_failure_excerpt "$claude_json"
         fi
         return 1
     fi
@@ -1704,7 +2307,7 @@ run_codex_cli() {
         echo "ERROR: Codex CLI failed (exit $status)."
         if [ -s "$codex_log" ]; then
             echo "Codex output before failure:"
-            sed -n '1,120p' "$codex_log"
+            print_cli_failure_excerpt "$codex_log"
         fi
         return "$status"
     fi
@@ -1713,7 +2316,7 @@ run_codex_cli() {
         echo "ERROR: Codex CLI completed but did not produce a final message."
         if [ -s "$codex_log" ]; then
             echo "Codex output:"
-            sed -n '1,120p' "$codex_log"
+            print_cli_failure_excerpt "$codex_log"
         fi
         return 1
     fi
@@ -1741,10 +2344,19 @@ else
         if run_selected_ai_cli "$FALLBACK_CLI"; then
             :
         else
-            exit 1
+            fallback_status=$?
+            if write_deterministic_fallback_section; then
+                AI_MODEL_LABEL="runner:deterministic-fallback"
+            else
+                exit "$fallback_status"
+            fi
         fi
     else
-        exit "$primary_status"
+        if write_deterministic_fallback_section; then
+            AI_MODEL_LABEL="runner:deterministic-fallback"
+        else
+            exit "$primary_status"
+        fi
     fi
 fi
 
