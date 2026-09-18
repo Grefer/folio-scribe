@@ -31,7 +31,7 @@
 
 ## Milestone 4: Safety and Privacy
 
-- [ ] Redact account numbers by default.
+- [x] Redact account numbers by default.
 - [ ] Add config validation.
 - [ ] Add "read-only mode" assertions.
 - [ ] Add sample data without private information.

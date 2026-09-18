@@ -215,6 +215,8 @@ skill/folio-scribe/scripts/sync_tradingweb.sh \
   --title "Trading Journal"
 ```
 
+The sync wrapper fails closed: it runs the vault's secrets guard (`<vault>/_tools/check_secrets.py`, or `FOLIO_SCRIBE_SECRETS_GUARD`) before building and again on the built output before deploying, and exits 1 without deploying if a scan fails or the guard is missing. Scheduled runs replace IBKR account ids with `U****（主）` (largest total assets) and `U****（次）` aliases before they reach prompts or notes.
+
 The output contains `index.html`, local assets, `data/journal.json`, and a `robots.txt` that disallows indexing. Deploy that output directory to Vercel, then protect access with Vercel Authentication. On Vercel Hobby, Standard Protection protects preview and deployment URLs, but production domains remain public; keep this journal on a protected preview URL unless your plan supports protecting all deployments.
 
 Safe Vercel deploy, creating a protected preview URL instead of a public production alias:
@@ -524,6 +526,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_WEB_DEPLOY` | unset | Optional web deploy target (`vercel`) |
 | `FOLIO_SCRIBE_WEB_WATCH` | unset | Set to `1` to install the TradingWeb WatchPaths sync agent |
 | `FOLIO_SCRIBE_WEB_SYNC_DEBOUNCE` | `8` for WatchPaths, `0` for direct sync | Seconds to wait before syncing after a file-change trigger |
+| `FOLIO_SCRIBE_SECRETS_GUARD` | `<vault>/_tools/check_secrets.py` | Python scanner the web sync runs before build (`GUARD`) and before deploy (`GUARD --path <out>`); a non-zero exit aborts the sync. `none` disables it |
 | `FOLIO_SCRIBE_HK_PLAN_TIME` | `08:15` | launchd local time for HK plan |
 | `FOLIO_SCRIBE_HK_REVIEW_TIME` | `16:15` | launchd local time for HK review |
 | `FOLIO_SCRIBE_US_PLAN_EARLY_TIME` | `16:30` | launchd local time for the early US draft plan |
@@ -741,6 +744,8 @@ skill/folio-scribe/scripts/sync_tradingweb.sh \
   --out ~/Documents/TradingWeb \
   --title "Trading Journal"
 ```
+
+同步脚本默认 fail closed：构建前运行库内的敏感信息守卫（`<vault>/_tools/check_secrets.py`，可用 `FOLIO_SCRIBE_SECRETS_GUARD` 覆盖，设为 `none` 关闭），部署前再扫描一次构建产物；任一扫描失败或守卫缺失即以退出码 1 中止，不会部署。定时任务会在 IBKR 账户号进入 prompt 或笔记之前替换为别名：`U****（主）`（总资产最大）和 `U****（次）`。
 
 导出目录包含 `index.html`、本地前端资源、`data/journal.json` 和默认禁止索引的 `robots.txt`。把这个目录部署到 Vercel，并在托管平台侧启用 Vercel Authentication。Vercel Hobby 的 Standard Protection 可保护 preview/deployment URL，但 production domain 仍会公开；除非你的套餐支持保护所有部署，否则这类交易日志应先放在受保护的 preview URL 上。
 

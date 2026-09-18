@@ -52,8 +52,22 @@ def load_market_calendar_module() -> Any:
     return module
 
 
+def load_account_alias_module() -> Any:
+    import importlib.util
+
+    script = SCRIPT_DIR / "account_alias.py"
+    spec = importlib.util.spec_from_file_location("account_alias", script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {script}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["account_alias"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 build_web_journal = load_build_web_journal_module()
 market_calendar = load_market_calendar_module()
+account_alias = load_account_alias_module()
 
 
 def parse_date(value: str) -> dt.date:
@@ -649,7 +663,8 @@ def write_summary_note(
 
     completed, total = completion_summary(notes)
     trading_start, trading_end = note_date_bounds(notes, start, end)
-    heading_body = ensure_heading(content, period_id, period)
+    # Weekly/Monthly notes are published; never let a raw account id through.
+    heading_body = account_alias.mask_account_ids(ensure_heading(content, period_id, period))
     frontmatter = (
         "---\n"
         f"period: {period}\n"

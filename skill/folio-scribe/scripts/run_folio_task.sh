@@ -553,14 +553,14 @@ read_ibkr_snapshot_json() {
 
     if [ "$IBKR_SNAPSHOT_MODE" = "required" ]; then
         echo "ERROR: IBKR snapshot failed and FOLIO_SCRIBE_IBKR_SNAPSHOT_MODE=required."
-        cat "$error_file"
+        python3 "$SCRIPT_DIR/account_alias.py" mask < "$error_file"
         return 1
     fi
 
     echo "WARNING: IBKR snapshot unavailable; continuing with Futu snapshot only."
     if [ -s "$error_file" ]; then
         echo "IBKR error excerpt:"
-        sed -n '1,12p' "$error_file"
+        python3 "$SCRIPT_DIR/account_alias.py" mask < "$error_file" | sed -n '1,12p'
     fi
     write_unavailable_ibkr_snapshot_json "$json_file" "$error_file"
 }
@@ -759,6 +759,15 @@ Path(sys.argv[1]).write_text(json.dumps(payload, ensure_ascii=False, indent=2), 
 PY
 fi
 
+# Swap raw IBKR account ids (keys, fields, error text) for 主/次 aliases before
+# anything formats the snapshot: prompts, fallback tables, and notes only ever
+# see aliases. The raw id is needed only for the Gateway request above.
+IBKR_ALIAS_ARGS=(sanitize-snapshot "$IBKR_SNAPSHOT_JSON_FILE")
+if [ -n "$IBKR_ACCOUNT" ]; then
+    IBKR_ALIAS_ARGS+=(--account-id "$IBKR_ACCOUNT")
+fi
+python3 "$SCRIPT_DIR/account_alias.py" "${IBKR_ALIAS_ARGS[@]}"
+
 SNAPSHOT_CONTEXT=$(python3 - "$SNAPSHOT_JSON_FILE" "$MARKET_PREFIX" "$MARKET_LABEL_EN" "$TASK_TYPE" "$WATCHLIST_CANDIDATE_CSV" <<'PY'
 import json
 import sys
@@ -956,10 +965,10 @@ lines.append("")
 lines.append("accounts:")
 if not accounts:
     lines.append("- (No IBKR account summary available.)")
-for account_id, account in accounts.items():
+for account_alias, account in accounts.items():
     lines.append(
         "- "
-        f"{account_id} | total_assets={value(account, 'total_assets')} {value(account, 'currency', '')} | "
+        f"{account_alias} | total_assets={value(account, 'total_assets')} {value(account, 'currency', '')} | "
         f"cash={value(account, 'cash')} | buying_power={value(account, 'buying_power')} | "
         f"leverage={value(account, 'leverage')}"
     )
@@ -1162,6 +1171,7 @@ market_scope_zh() {
 - positions 中 diluted_cost 是 Futu 摊薄成本口径；pnl_diluted_basis 是配套盈亏口径，不要写成平均成本口径的未实现盈亏。
 - 美股计划里的 latest 字段已经按当前交易阶段选择：盘前优先 pre_price；regular_close 只是上一常规盘收盘价，不能当作盘前最新价。
 - 美股任务必须通过已连接的 IBKR 插件动态读取账户持仓、成本、订单、成交、余额和保证金；插件结果是 IBKR 账户事实源。Futu OpenD 主要用于实时/盘前盘后行情、触发价和候选观察标的。不要把两个券商的持仓混为同一账户；不要因为本地 Gateway 关闭而把 IBKR 持仓写成空仓。
+- 账户号是敏感信息，输出中不得出现任何原始账户号（如 U 加数字）。IBKR 账户一律用别名：总资产（净清算价值）最大的写 U****（主），其余写 U****（次）；超过两个账户时依次写 U****（次1）、U****（次2）。IBKR 摘要中已是别名的原样使用。
 - 当前持仓、已有期权和已有订单只放在“当前持仓/标的计划/期权计划”里，不要列入推荐关注清单；如果没有候选行情，保留表头并说明“无候选标的数据”。
 - 推荐关注清单只用于后续观察，不是买入建议。
 EOF
@@ -1180,6 +1190,7 @@ Market isolation rules:
 - In positions, diluted_cost is Futu's diluted-cost basis; pnl_diluted_basis is the paired P/L basis. Do not describe it as average-cost unrealized P/L.
 - For US plans, the latest field is already session-aware: pre-market uses pre_price first. regular_close is only the prior regular-session close and must not be treated as the current pre-market price.
 - For US tasks, dynamically read positions, cost basis, orders, trades, balances, and margin from the connected IBKR app; its response is the source of truth for the IBKR account. Use Futu OpenD primarily for live and extended-hours quotes, triggers, and watchlist candidates. Do not merge the two brokers, and do not report the IBKR account as empty merely because local Gateway is closed.
+- Account numbers are sensitive: never write a raw account number (such as U followed by digits). Refer to IBKR accounts only by alias: the account with the largest total assets (net liquidation) is U****（主）, the other U****（次）, or U****（次1）, U****（次2）… when there are more than two. Use aliases already present in the IBKR summary verbatim.
 - Current positions, existing options, and working orders belong only in the positions/instrument/option sections. Do not list them in the recommended watchlist unless no candidate quotes are available, in which case keep the table header and state that candidate data is unavailable.
 - Watchlist candidates are for observation only, not buy recommendations.
 EOF
@@ -1964,9 +1975,9 @@ def account_rows(source, payload):
             value(account, "currency"),
         ])
     accounts = payload.get("accounts") or {}
-    for account_id, item in accounts.items():
+    for account_alias, item in accounts.items():
         rows.append([
-            f"{source}:{account_id}",
+            f"{source}:{account_alias}",
             value(item, "total_assets"),
             value(item, "cash"),
             value(item, "buying_power"),

@@ -10,7 +10,28 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import sys
 from pathlib import Path
+from typing import Any
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+
+def load_account_alias_module() -> Any:
+    import importlib.util
+
+    script = SCRIPT_DIR / "account_alias.py"
+    spec = importlib.util.spec_from_file_location("account_alias", script)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load {script}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["account_alias"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+account_alias = load_account_alias_module()
 
 
 SECTION_MARKERS = {
@@ -142,6 +163,8 @@ def write_daily_note(
         note = default_note(date, is_chinese)
 
     start_marker, end_marker = SECTION_MARKERS[section]
+    # Daily notes are published; last-line guard for ids an AI copied from elsewhere.
+    content = account_alias.mask_account_ids(content)
     updated = replace_section(note, start_marker, end_marker, content)
     updated = set_frontmatter_model(updated, model)
     note_path.write_text(updated, encoding="utf-8")

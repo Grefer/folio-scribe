@@ -196,6 +196,8 @@ python3 scripts/write_daily_note.py --vault /path/to/vault --date YYYY-MM-DD --s
 python3 scripts/write_daily_note.py --vault /path/to/vault --date YYYY-MM-DD --section us_review --content /tmp/us-review.md --chinese
 ```
 
+Never write raw broker account numbers into journal notes; `Daily/`, `Weekly/`, and `Monthly/` are often published. Refer to accounts by alias: the account with the largest total assets (net liquidation) is `U****（主）`, the other `U****（次）`, or `U****（次1）`, `U****（次2）` … when there are more than two. `scripts/write_daily_note.py` masks any IBKR-style id that still slips through as `U****`.
+
 ### Frontmatter
 
 Every daily note must have exactly these YAML frontmatter fields:

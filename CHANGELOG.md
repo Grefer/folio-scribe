@@ -7,7 +7,11 @@ All notable changes to folio-scribe are documented here.
 ### Added
 - 2027 Hong Kong holiday coverage for the bundled market calendar.
 
+### Changed
+- `sync_tradingweb.sh` fails closed: it runs the vault secrets guard (`FOLIO_SCRIBE_SECRETS_GUARD`, default `<vault>/_tools/check_secrets.py`) before building and on the built output before deploying, and aborts with exit 1 if either scan fails or the guard is missing.
+
 ### Fixed
+- IBKR account ids no longer reach AI prompts, deterministic-fallback tables, IBKR error lines, runner logs, or notes. The runner replaces them with `U****（主）`/`U****（次）` aliases (largest total assets = 主) right after reading the snapshot, and the Daily/Weekly/Monthly writers mask any remaining IBKR-style id as `U****`.
 - Scheduled runners now use a per-task lock, private temp directory cleanup, and AI CLI wall-clock timeouts.
 - Scheduled runner logs no longer dump full prompts with account and position data, and default logs now live outside the vault.
 - Periodic summaries now close temporary file descriptors and treat TradingWeb sync failures as warnings after the summary is written.
