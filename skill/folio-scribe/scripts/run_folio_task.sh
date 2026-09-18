@@ -49,6 +49,8 @@ AI_CLI=$(printf '%s' "$AI_CLI" | tr '[:upper:]' '[:lower:]')
 AI_FALLBACK_CLI="${FOLIO_SCRIBE_AI_FALLBACK_CLI:-auto}"
 AI_FALLBACK_CLI=$(printf '%s' "$AI_FALLBACK_CLI" | tr '[:upper:]' '[:lower:]')
 DETERMINISTIC_FALLBACK="${FOLIO_SCRIBE_DETERMINISTIC_FALLBACK:-1}"
+NOTIFY="${FOLIO_SCRIBE_NOTIFY:-1}"                              # 1|0：AI 降级时发 macOS 通知
+AI_LAST_FAILURE_REASON=""
 DETERMINISTIC_FALLBACK=$(printf '%s' "$DETERMINISTIC_FALLBACK" | tr '[:upper:]' '[:lower:]')
 CLAUDE="${FOLIO_SCRIBE_CLAUDE:-$(command -v claude 2>/dev/null || echo /opt/homebrew/bin/claude)}"
 CLAUDE_SETTINGS="${FOLIO_SCRIBE_CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
@@ -73,6 +75,7 @@ ALLOW_NON_TRADING_DAY="${FOLIO_SCRIBE_ALLOW_NON_TRADING_DAY:-0}"
 ALLOW_NON_TRADING_DAY=$(printf '%s' "$ALLOW_NON_TRADING_DAY" | tr '[:upper:]' '[:lower:]')
 LANG_PREF="${FOLIO_SCRIBE_LANG:-zh}"   # zh | en
 LOG_DIR="${FOLIO_SCRIBE_LOG_DIR:-$VAULT/.logs}"
+NOTIFY_FILE="${FOLIO_SCRIBE_NOTIFY_FILE:-$LOG_DIR/ai-degraded.log}"
 MAX_OPEND_WAIT=90
 MAX_SNAPSHOT_READY_WAIT="${FOLIO_SCRIBE_SNAPSHOT_READY_WAIT:-60}"
 SNAPSHOT_READY_INTERVAL="${FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL:-5}"
@@ -149,6 +152,12 @@ case "$DETERMINISTIC_FALLBACK" in
     0|false|no|off|"") DETERMINISTIC_FALLBACK=0 ;;
     1|true|yes|on) DETERMINISTIC_FALLBACK=1 ;;
     *) echo "ERROR: Unsupported FOLIO_SCRIBE_DETERMINISTIC_FALLBACK '$DETERMINISTIC_FALLBACK'. Use: 0|1"; exit 1 ;;
+esac
+
+case "$NOTIFY" in
+    0|false|no|off|"") NOTIFY=0 ;;
+    1|true|yes|on) NOTIFY=1 ;;
+    *) echo "ERROR: Unsupported FOLIO_SCRIBE_NOTIFY '$NOTIFY'. Use: 0|1"; exit 1 ;;
 esac
 
 case "$IBKR_SNAPSHOT_MODE" in
@@ -1808,6 +1817,73 @@ if len(lines) > 120:
 PY
 }
 
+# 从 CLI 的失败输出里提取一行人类可读的原因，供通知使用。
+# 不打印任何 prompt 内容；只取结构化的错误字段或 ERROR 行。
+capture_failure_reason() {
+    local path="$1"
+    AI_LAST_FAILURE_REASON=$(python3 - "$path" <<'PY'
+import json, re, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit
+
+text = path.read_text(encoding="utf-8", errors="replace")
+
+# Claude: --output-format json，错误在 result 字段
+brace = text.find("{")
+if brace >= 0:
+    try:
+        data = json.loads(text[brace:])
+        if isinstance(data, dict) and data.get("is_error"):
+            reason = str(data.get("result") or data.get("terminal_reason") or "").strip()
+            if reason:
+                print(reason[:200]); raise SystemExit
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+# Codex 及其他：取第一条不含 prompt 的 ERROR 行
+for line in text.splitlines():
+    line = line.strip()
+    if re.match(r"^(ERROR|error):", line) and "prompt" not in line.lower():
+        print(re.sub(r"^\w+:\s*", "", line)[:200]); raise SystemExit
+PY
+)
+}
+
+# AI 降级告警。level=fallback（主 CLI 失败、备用接管）或 degraded（两级都失败）。
+# 主 CLI 失败就通知，是为了避免像 2026-09-14 那次：Claude 静默失败 4 天，
+# 全靠 Codex 兜底，直到 Codex 额度耗尽才被发现。
+notify_degraded() {
+    local level="$1" summary="$2" reason="${3:-}"
+    local stamp; stamp=$(date "+%Y-%m-%d %H:%M:%S %Z")
+    local title subtitle
+
+    case "$level" in
+        fallback) title="Folio Scribe：AI 已降级" ;;
+        degraded) title="Folio Scribe：AI 全部失败" ;;
+        *)        title="Folio Scribe：AI 异常" ;;
+    esac
+    subtitle="${TASK_TYPE:-task} · ${NOTE_DATE:-}"
+
+    # 落盘：即使通知被忽略也留痕，可 grep、可被巡检脚本读取
+    mkdir -p "$(dirname "$NOTIFY_FILE")" 2>/dev/null || true
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$stamp" "$level" "${TASK_TYPE:-?}" "$summary" "${reason:-}" >> "$NOTIFY_FILE" 2>/dev/null || true
+
+    echo "NOTIFY[$level] $summary${reason:+ — $reason}"
+
+    [ "$NOTIFY" = "1" ] || return 0
+    command -v osascript >/dev/null 2>&1 || return 0
+
+    # osascript 字符串里的反斜杠和双引号必须转义，否则通知会静默丢失
+    local body; body="$summary${reason:+ — $reason}"
+    body=${body//\\/\\\\}; body=${body//\"/\\\"}
+    subtitle=${subtitle//\\/\\\\}; subtitle=${subtitle//\"/\\\"}
+    osascript -e "display notification \"${body}\" with title \"${title}\" subtitle \"${subtitle}\"" >/dev/null 2>&1 || true
+}
+
 write_deterministic_fallback_section() {
     if [ "$DETERMINISTIC_FALLBACK" != "1" ]; then
         return 1
@@ -2186,6 +2262,7 @@ run_claude_cli() {
     else
         local status=$?
         echo "ERROR: Claude CLI failed (exit $status)."
+        capture_failure_reason "$claude_json"
         if [ -s "$claude_json" ]; then
             echo "Claude output before failure:"
             print_cli_failure_excerpt "$claude_json"
@@ -2305,6 +2382,7 @@ run_codex_cli() {
     else
         local status=$?
         echo "ERROR: Codex CLI failed (exit $status)."
+        capture_failure_reason "$codex_log"
         if [ -s "$codex_log" ]; then
             echo "Codex output before failure:"
             print_cli_failure_excerpt "$codex_log"
@@ -2340,11 +2418,13 @@ else
     FALLBACK_CLI=$(resolved_fallback_cli)
     if [ -n "$FALLBACK_CLI" ]; then
         echo "WARNING: ${AI_CLI} failed; falling back to ${FALLBACK_CLI} CLI for this run."
+        notify_degraded fallback "主 CLI ${AI_CLI} 失败，本次由 ${FALLBACK_CLI} 接管" "$AI_LAST_FAILURE_REASON"
         : > "$AI_CONTENT_FILE"
         if run_selected_ai_cli "$FALLBACK_CLI"; then
             :
         else
             fallback_status=$?
+            notify_degraded degraded "主备 CLI（${AI_CLI} / ${FALLBACK_CLI}）均失败，笔记只有数据无分析" "$AI_LAST_FAILURE_REASON"
             if write_deterministic_fallback_section; then
                 AI_MODEL_LABEL="runner:deterministic-fallback"
             else
@@ -2352,6 +2432,7 @@ else
             fi
         fi
     else
+        notify_degraded degraded "CLI ${AI_CLI} 失败且未配置备用，笔记只有数据无分析" "$AI_LAST_FAILURE_REASON"
         if write_deterministic_fallback_section; then
             AI_MODEL_LABEL="runner:deterministic-fallback"
         else
