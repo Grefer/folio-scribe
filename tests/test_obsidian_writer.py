@@ -189,6 +189,24 @@ class WriteDailyNoteTests(unittest.TestCase):
             )
             self.assertIn("model: opus", path.read_text(encoding="utf-8"))
 
+    def test_masks_account_ids_in_written_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            path = write_daily_note(
+                vault,
+                "2026-05-08",
+                "美股计划",
+                "| IBKR:U12345678 | 100000 |\n"
+                "账户U87654321的现金偏低；acct_U23456789；DU1234567。\n"
+                "- US.U260918C25000 | order_id=1234567890 | U****（主）\n",
+                chinese=True,
+            )
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("| IBKR:U**** | 100000 |", text)
+            self.assertIn("账户U****的现金偏低；acct_U****；U****。", text)
+            self.assertIn("- US.U260918C25000 | order_id=1234567890 | U****（主）", text)
+            self.assertNotRegex(text, r"U\d{7,}")
+
 
 class SectionMarkersConsistencyTests(unittest.TestCase):
     """Sanity checks for the SECTION_MARKERS dict."""

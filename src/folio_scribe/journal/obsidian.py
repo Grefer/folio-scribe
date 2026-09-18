@@ -4,6 +4,8 @@ import argparse
 import datetime as dt
 from pathlib import Path
 
+from folio_scribe.privacy import mask_account_ids
+
 
 SECTION_MARKERS = {
     "plan": ("## 08:45 Trading Plan", "## 16:15 Trading Review"),
@@ -138,6 +140,8 @@ def write_daily_note(
         note = default_note(date, is_chinese)
 
     start_marker, end_marker = SECTION_MARKERS[section]
+    # Daily notes are often published; never write a raw broker account id.
+    content = mask_account_ids(content)
     updated = replace_section(note, start_marker, end_marker, content)
     updated = set_frontmatter_model(updated, model)
     note_path.write_text(updated, encoding="utf-8")

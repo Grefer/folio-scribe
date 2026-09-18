@@ -12,6 +12,7 @@ All notable changes to folio-scribe are documented here.
 
 ### Fixed
 - IBKR account ids no longer reach AI prompts, deterministic-fallback tables, IBKR error lines, runner logs, or notes. The runner replaces them with `U****（主）`/`U****（次）` aliases (largest total assets = 主) right after reading the snapshot, and the Daily/Weekly/Monthly writers mask any remaining IBKR-style id as `U****`.
+- The package writer `folio_scribe.journal.obsidian.write_daily_note` now masks IBKR-style account ids as `U****` too (new `folio_scribe.privacy.mask_account_ids`), matching the bundled skill writer.
 - Scheduled runners now use a per-task lock, private temp directory cleanup, and AI CLI wall-clock timeouts.
 - Scheduled runner logs no longer dump full prompts with account and position data, and default logs now live outside the vault.
 - Periodic summaries now close temporary file descriptors and treat TradingWeb sync failures as warnings after the summary is written.
