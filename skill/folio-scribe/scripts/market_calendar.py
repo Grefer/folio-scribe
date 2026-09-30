@@ -2,7 +2,8 @@
 """Small bundled market-day calendar for Folio Scribe scheduled tasks.
 
 The daily runner only needs a conservative open/closed decision before it
-starts OpenD and AI generation.  Keep this file dependency-free so copied skill
+starts OpenD and AI generation, and the trading date a run belongs to in the
+market's own time zone.  Keep this file dependency-free so copied skill
 bundles work without installing exchange calendar packages.
 """
 
@@ -11,6 +12,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 
 @dataclass(frozen=True)
@@ -136,16 +138,23 @@ def hkex_holidays(date: dt.date) -> dict[dt.date, str]:
     return HKEX_HOLIDAYS[date.year]
 
 
-def market_status(market: str, date: dt.date) -> MarketStatus:
+MARKET_TIMEZONES = {"HK": "Asia/Hong_Kong", "US": "America/New_York"}
+# HKEX and NYSE regular sessions both end at 16:00 local time.
+SESSION_CLOSE = dt.time(16, 0)
+
+
+def market_label(market: str) -> str:
     normalized = market.upper()
     if normalized in {"HK", "HKEX", "XHKG"}:
-        label = "HK"
-        holidays = hkex_holidays(date)
-    elif normalized in {"US", "NYSE", "NASDAQ", "XNYS", "XNAS"}:
-        label = "US"
-        holidays = nyse_holidays(date)
-    else:
-        raise ValueError(f"Unsupported market '{market}'. Use HK or US.")
+        return "HK"
+    if normalized in {"US", "NYSE", "NASDAQ", "XNYS", "XNAS"}:
+        return "US"
+    raise ValueError(f"Unsupported market '{market}'. Use HK or US.")
+
+
+def market_status(market: str, date: dt.date) -> MarketStatus:
+    label = market_label(market)
+    holidays = hkex_holidays(date) if label == "HK" else nyse_holidays(date)
 
     if date.weekday() >= 5:
         return MarketStatus(label, date, False, "Weekend")
@@ -154,13 +163,48 @@ def market_status(market: str, date: dt.date) -> MarketStatus:
     return MarketStatus(label, date, True, "Regular trading day")
 
 
+def session_date(market: str, task: str, now: dt.datetime | None = None) -> dt.date:
+    """Trading date a plan or review run belongs to, in the market's own time zone.
+
+    A plan targets the session that has not closed yet: today before the close,
+    otherwise tomorrow.  A review targets the latest closed session: today after
+    the close, otherwise yesterday.  Weekends and holidays are left to
+    market_status(), so the result does not depend on the machine's time zone.
+    """
+    if task not in {"plan", "review"}:
+        raise ValueError(f"Unsupported task '{task}'. Use plan or review.")
+    now = now or dt.datetime.now(dt.timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError("now must include a UTC offset")
+    local = now.astimezone(ZoneInfo(MARKET_TIMEZONES[market_label(market)]))
+    after_close = local.time() >= SESSION_CLOSE
+    if task == "plan":
+        return local.date() + dt.timedelta(days=1 if after_close else 0)
+    return local.date() - dt.timedelta(days=0 if after_close else 1)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check bundled Folio Scribe market open days.")
-    parser.add_argument("command", choices=["is-open"])
+    parser.add_argument("command", choices=["is-open", "session-date"])
     parser.add_argument("--market", required=True, help="HK or US")
-    parser.add_argument("--date", required=True, help="YYYY-MM-DD")
+    parser.add_argument("--date", help="YYYY-MM-DD (is-open)")
+    parser.add_argument("--task", choices=["plan", "review"], help="session-date: which run the date is for")
+    parser.add_argument("--now", help="session-date: ISO 8601 time with UTC offset (default: now)")
     args = parser.parse_args(argv)
 
+    if args.command == "session-date":
+        if not args.task:
+            parser.error("session-date requires --task")
+        try:
+            now = dt.datetime.fromisoformat(args.now) if args.now else None
+            print(session_date(args.market, args.task, now).isoformat())
+        except Exception as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        return 0
+
+    if not args.date:
+        parser.error("is-open requires --date")
     try:
         status = market_status(args.market, parse_date(args.date))
     except Exception as exc:

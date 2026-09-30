@@ -343,6 +343,10 @@ do_install() {
     printf '    %02d:%02d  us_review\n' "$US_REVIEW_HOUR" "$US_REVIEW_MINUTE"
     printf '    %02d:%02d  weekly_summary (Saturday)\n' "$WEEKLY_SUMMARY_HOUR" "$WEEKLY_SUMMARY_MINUTE"
     printf '    %02d:%02d  monthly_summary (day 1)\n' "$MONTHLY_SUMMARY_HOUR" "$MONTHLY_SUMMARY_MINUTE"
+    if [ "$(date +%z)" != "+0800" ] && [ -z "${FOLIO_SCRIBE_HK_PLAN_TIME:-}${FOLIO_SCRIBE_HK_REVIEW_TIME:-}${FOLIO_SCRIBE_US_PLAN_EARLY_TIME:-}${FOLIO_SCRIBE_US_PLAN_TIME:-}${FOLIO_SCRIBE_US_REVIEW_TIME:-}" ]; then
+        echo "  WARNING: the default times assume Hong Kong time (UTC+8), but this Mac is on $(date +%Z)."
+        echo "           Set FOLIO_SCRIBE_*_TIME to local equivalents (README > Schedule)."
+    fi
     echo "  Log dir:   $LOG_DIR"
     echo ""
 

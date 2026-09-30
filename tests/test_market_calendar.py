@@ -70,6 +70,73 @@ class MarketCalendarTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("closed", result.stdout)
 
+    def assert_session_dates(self, runs: list[tuple[str, str, str, dt.date]]) -> None:
+        for market, task, now, expected in runs:
+            with self.subTest(market=market, task=task, now=now):
+                actual = self.calendar.session_date(market, task, dt.datetime.fromisoformat(now))
+                self.assertEqual(actual, expected)
+
+    def test_session_date_matches_original_hkt_schedule(self) -> None:
+        day = dt.date(2026, 9, 29)
+        self.assert_session_dates([
+            ("HK", "plan", "2026-09-29T08:15:00+08:00", day),
+            ("HK", "review", "2026-09-29T16:15:00+08:00", day),
+            ("US", "plan", "2026-09-29T16:30:00+08:00", day),
+            ("US", "plan", "2026-09-29T20:45:00+08:00", day),
+            ("US", "review", "2026-09-30T06:45:00+08:00", day),
+        ])
+
+    def test_session_date_on_pacific_schedule(self) -> None:
+        day = dt.date(2026, 9, 29)
+        self.assert_session_dates([
+            ("HK", "plan", "2026-09-28T16:45:00-07:00", day),
+            ("HK", "review", "2026-09-29T01:15:00-07:00", day),
+            ("US", "plan", "2026-09-29T01:30:00-07:00", day),
+            ("US", "plan", "2026-09-29T05:45:00-07:00", day),
+            ("US", "review", "2026-09-29T15:45:00-07:00", day),
+        ])
+
+    def test_session_date_on_pacific_schedule_after_dst_ends(self) -> None:
+        day = dt.date(2026, 11, 2)
+        self.assert_session_dates([
+            ("HK", "plan", "2026-11-01T16:45:00-08:00", day),
+            ("HK", "review", "2026-11-02T01:15:00-08:00", day),
+            ("US", "plan", "2026-11-02T05:45:00-08:00", day),
+            ("US", "review", "2026-11-02T15:45:00-08:00", day),
+        ])
+
+    def test_session_date_rolls_over_at_the_close(self) -> None:
+        self.assert_session_dates([
+            ("US", "plan", "2026-09-29T16:00:00-04:00", dt.date(2026, 9, 30)),
+            ("US", "review", "2026-09-29T15:59:00-04:00", dt.date(2026, 9, 28)),
+            ("HK", "review", "2026-09-29T08:00:00+08:00", dt.date(2026, 9, 28)),
+        ])
+
+    def test_session_date_requires_an_offset(self) -> None:
+        with self.assertRaises(ValueError):
+            self.calendar.session_date("US", "plan", dt.datetime(2026, 9, 29, 8, 45))
+
+    def test_cli_prints_session_date(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "session-date",
+                "--market",
+                "US",
+                "--task",
+                "review",
+                "--now",
+                "2026-09-29T15:45:00-07:00",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), "2026-09-29")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ All notable changes to folio-scribe are documented here.
 - `FOLIO_SCRIBE_CLAUDE_EFFORT` (default `xhigh`) sets the Claude Code effort for scheduled runs and periodic summaries, independent of the interactive default. The runner passes a copy of the user settings with `env.CLAUDE_CODE_EFFORT_LEVEL` overridden, because that setting takes precedence over `--effort`.
 
 ### Changed
+- The runner takes the note date from each market's own time zone (new `market_calendar.py session-date`): a plan belongs to the session that has not closed yet, a review to the latest closed one. The machine's time zone no longer shifts note dates, and auto-detection without a task argument reads the Hong Kong clock. The README lists launchd times for `America/Los_Angeles`, and the installer warns when the Mac is not on UTC+8 and no times are set.
 - `FOLIO_SCRIBE_MAX_BUDGET_USD` is now unset by default, so no budget cap is passed. Claude Code checks the cap only after a single-turn reply is generated, so exceeding it spent the tokens and then discarded the output.
 - `sync_tradingweb.sh` fails closed: it runs the vault secrets guard (`FOLIO_SCRIBE_SECRETS_GUARD`, default `<vault>/_tools/check_secrets.py`) before building and on the built output before deploying, and aborts with exit 1 if either scan fails or the guard is missing.
 

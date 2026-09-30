@@ -3,12 +3,15 @@
 #
 # Usage:  run_folio_task.sh [hk_plan|hk_review|us_plan|us_review]
 #
-# Without arguments, auto-detects task type from current time:
+# Without arguments, auto-detects task type from the current Hong Kong time (HKT):
 #   05:00–08:14  →  us_review   (美股收盘后总结，写入昨日笔记)
 #   08:15–12:59  →  hk_plan     (港股开盘前计划)
 #   16:15–16:29  →  hk_review   (港股收盘后总结)
 #   16:30–04:59  →  us_plan     (美股盘前计划；16:30 初版，20:45 后刷新版)
 #   Other times   →  no-op
+#
+# The note date always follows the market's own time zone (see market_calendar.py
+# session-date), so launchd times only need to be the local equivalents.
 #
 # With argument, uses that task type directly (override).
 #
@@ -206,8 +209,8 @@ esac
 # ── Auto-detect task type from current time ──────────────────────────
 detect_task_type() {
     local hour minute total
-    hour=$((10#$(date +%H)))
-    minute=$((10#$(date +%M)))
+    hour=$((10#$(TZ=Asia/Hong_Kong date +%H)))
+    minute=$((10#$(TZ=Asia/Hong_Kong date +%M)))
     total=$((hour * 60 + minute))
 
     if   [ "$total" -ge 300  ] && [ "$total" -lt 495  ]; then echo "us_review" # 05:00-08:14
@@ -262,8 +265,8 @@ infer_us_plan_phase() {
     fi
 
     if [ -z "$PLAN_PHASE" ]; then
-        hour=$((10#$(date +%H)))
-        minute=$((10#$(date +%M)))
+        hour=$((10#$(TZ=Asia/Hong_Kong date +%H)))
+        minute=$((10#$(TZ=Asia/Hong_Kong date +%M)))
         total=$((hour * 60 + minute))
         if [ "$total" -ge 990 ] && [ "$total" -lt 1245 ]; then
             PLAN_PHASE="early"
@@ -299,14 +302,22 @@ echo "================================================================"
 
 # ── Determine note/session date ─────────────────────────────────────
 case "$TASK_TYPE" in
-    us_review)
-        # 06:45 AM review covers the US session that started the previous evening.
-        NOTE_DATE=$(date -v-1d +%Y-%m-%d)
-        ;;
-    *)
-        NOTE_DATE=$(date +%Y-%m-%d)
-        ;;
+    hk_*) MARKET_CALENDAR="HK"; MARKET_TZ="Asia/Hong_Kong" ;;
+    us_*) MARKET_CALENDAR="US"; MARKET_TZ="America/New_York" ;;
 esac
+
+if [ ! -f "$SCRIPT_DIR/market_calendar.py" ]; then
+    echo "ERROR: market_calendar.py not found in $SCRIPT_DIR"
+    exit 1
+fi
+
+# 按市场所在时区定交易日：计划对应尚未收盘的交易日，总结对应最近一个已收盘的交易日。
+# 与本机时区无关（2026-09 起本机在 America/Los_Angeles）。
+if ! NOTE_DATE=$(python3 "$SCRIPT_DIR/market_calendar.py" session-date --market "$MARKET_CALENDAR" --task "${TASK_TYPE#*_}"); then
+    echo "ERROR: could not determine the $MARKET_CALENDAR session date: $NOTE_DATE"
+    exit 1
+fi
+echo "Market time: $(TZ="$MARKET_TZ" date '+%Y-%m-%d %H:%M %Z')"
 if [ -n "$NOTE_DATE_OVERRIDE" ]; then
     case "$NOTE_DATE_OVERRIDE" in
         [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
@@ -322,16 +333,6 @@ fi
 echo "Note date: $NOTE_DATE"
 
 # ── Market calendar guard ───────────────────────────────────────────
-case "$TASK_TYPE" in
-    hk_*) MARKET_CALENDAR="HK" ;;
-    us_*) MARKET_CALENDAR="US" ;;
-esac
-
-if [ ! -f "$SCRIPT_DIR/market_calendar.py" ]; then
-    echo "ERROR: market_calendar.py not found in $SCRIPT_DIR"
-    exit 1
-fi
-
 set +e
 MARKET_STATUS=$(python3 "$SCRIPT_DIR/market_calendar.py" is-open --market "$MARKET_CALENDAR" --date "$NOTE_DATE" 2>&1)
 MARKET_STATUS_CODE=$?

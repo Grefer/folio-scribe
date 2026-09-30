@@ -308,11 +308,24 @@ FOLIO_SCRIBE_US_REVIEW_TIME=06:50 \
 skill/folio-scribe/scripts/install_schedule.sh install
 ```
 
+launchd times are local to the Mac, and the defaults assume it runs on Hong Kong time (UTC+8). The note date always follows each market's own time zone, so on another time zone only the launchd times need to change. For `America/Los_Angeles`:
+
+```bash
+FOLIO_SCRIBE_HK_PLAN_TIME=16:45 \
+FOLIO_SCRIBE_HK_REVIEW_TIME=01:15 \
+FOLIO_SCRIBE_US_PLAN_EARLY_TIME=01:30 \
+FOLIO_SCRIBE_US_PLAN_TIME=05:45 \
+FOLIO_SCRIBE_US_REVIEW_TIME=15:45 \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
+
+Hong Kong has no daylight saving time, so the HK times are picked to work in both PDT and PST: the plan runs at 07:45 or 08:45 HKT (before the 09:30 open), the review at 16:15 or 17:15 HKT. The US times move with US/Eastern: 04:30, 08:45 and 18:45 ET year-round.
+
 ### Auto-Detection Rules
 
-When running without arguments, the task type is inferred from the current time:
+When running without arguments, the task type is inferred from the current Hong Kong time:
 
-| Local Time | Task |
+| Time (HKT) | Task |
 |:--|:--|
 | 05:00 – 08:14 | `us_review` |
 | 08:15 – 12:59 | `hk_plan` |
@@ -889,9 +902,22 @@ FOLIO_SCRIBE_US_REVIEW_TIME=06:50 \
 skill/folio-scribe/scripts/install_schedule.sh install
 ```
 
-自动判断规则（无参数运行时）：
+launchd 的时间是本机时间，默认值假设本机在香港时间（UTC+8）。笔记日期始终按各市场自己的时区确定，所以换了时区只需要改 launchd 时间。`America/Los_Angeles` 用：
 
-| 本地时间 | 任务 |
+```bash
+FOLIO_SCRIBE_HK_PLAN_TIME=16:45 \
+FOLIO_SCRIBE_HK_REVIEW_TIME=01:15 \
+FOLIO_SCRIBE_US_PLAN_EARLY_TIME=01:30 \
+FOLIO_SCRIBE_US_PLAN_TIME=05:45 \
+FOLIO_SCRIBE_US_REVIEW_TIME=15:45 \
+skill/folio-scribe/scripts/install_schedule.sh install
+```
+
+香港没有夏令时，港股的两个时间选的是 PDT、PST 下都合适的时刻：计划在 07:45 或 08:45 HKT（09:30 开盘前），总结在 16:15 或 17:15 HKT。美股时间随美东时间一起变，全年都是 04:30、08:45、18:45 ET。
+
+自动判断规则（无参数运行时，按香港时间）：
+
+| 时间 (HKT) | 任务 |
 |:--|:--|
 | 05:00 – 08:14 | `us_review` |
 | 08:15 – 12:59 | `hk_plan` |
