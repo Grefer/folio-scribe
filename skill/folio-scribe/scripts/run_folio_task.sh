@@ -2444,13 +2444,62 @@ run_codex_cli() {
     return 0
 }
 
+# 2026-09-18 港股总结曾把几段 "Bash Tool {...}" 工具调用原文当正文写进笔记，退出码和
+# 非空检查都拦不住。这里要求输出带齐模板里的 ### 标题、且不含工具调用原文，
+# 否则按失败处理，走备用 CLI 或保底段落。
+validate_ai_content() {
+    local template_file reason
+    template_file=$(mktemp "$SENSITIVE_TMP_DIR/template.XXXXXX")
+    if [ "$LANG_PREF" = "en" ]; then
+        format_template_en > "$template_file"
+    else
+        format_template_zh > "$template_file"
+    fi
+
+    if reason=$(python3 - "$AI_CONTENT_FILE" "$template_file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+content = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+template = Path(sys.argv[2]).read_text(encoding="utf-8")
+
+problems = []
+if (
+    re.search(r"(?m)^\w+ Tool[ \t]*\n\{", content)
+    or "<function_calls>" in content
+    or "<invoke " in content
+    or re.search(r'(?m)^\s*"(command|file_path)"\s*:', content)
+):
+    problems.append("contains tool-call text")
+
+lines = {line.strip() for line in content.splitlines()}
+missing = [h.strip() for h in template.splitlines() if h.startswith("### ") and h.strip() not in lines]
+if missing:
+    shown = ", ".join(h[4:] for h in missing[:3])
+    more = f" (+{len(missing) - 3} more)" if len(missing) > 3 else ""
+    problems.append(f"missing headings: {shown}{more}")
+
+if problems:
+    print("; ".join(problems))
+    raise SystemExit(1)
+PY
+    ); then
+        return 0
+    fi
+    echo "ERROR: AI output failed validation: $reason"
+    AI_LAST_FAILURE_REASON="output failed validation: $reason"
+    return 1
+}
+
 run_selected_ai_cli() {
     local cli="$1"
     case "$cli" in
         claude) run_claude_cli ;;
         codex) run_codex_cli ;;
         *) echo "ERROR: Unsupported AI CLI '$cli'"; return 1 ;;
-    esac
+    esac || return
+    validate_ai_content
 }
 
 echo "AI CLI: $AI_CLI"
