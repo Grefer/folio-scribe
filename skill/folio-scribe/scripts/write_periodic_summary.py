@@ -456,8 +456,11 @@ def run_claude(prompt: str, content_path: Path, fallback_label: str, model: str,
     claude = os.environ.get("FOLIO_SCRIBE_CLAUDE") or shutil.which("claude") or "/opt/homebrew/bin/claude"
     settings = Path(os.environ.get("FOLIO_SCRIBE_CLAUDE_SETTINGS", Path.home() / ".claude/settings.json"))
     max_turns = os.environ.get("FOLIO_SCRIBE_MAX_TURNS", "20")
-    max_budget = os.environ.get("FOLIO_SCRIBE_MAX_BUDGET_USD", "0.80")
+    max_budget = os.environ.get("FOLIO_SCRIBE_MAX_BUDGET_USD", "")
     bare = os.environ.get("FOLIO_SCRIBE_CLAUDE_BARE", "0").lower() in {"1", "true", "yes", "on"}
+    effort = (os.environ.get("FOLIO_SCRIBE_CLAUDE_EFFORT") or "xhigh").lower()
+    if effort not in {"low", "medium", "high", "xhigh", "max"}:
+        raise ValueError(f"Unsupported FOLIO_SCRIBE_CLAUDE_EFFORT '{effort}'. Use: low|medium|high|xhigh|max")
 
     args = [
         claude,
@@ -465,18 +468,31 @@ def run_claude(prompt: str, content_path: Path, fallback_label: str, model: str,
         prompt,
         "--max-turns",
         max_turns,
-        "--max-budget-usd",
-        max_budget,
         "--no-session-persistence",
         "--output-format",
         "json",
         "--tools",
         "",
     ]
+    if max_budget:
+        args.extend(["--max-budget-usd", max_budget])
     if bare:
         args.append("--bare")
-    if settings.exists():
-        args.extend(["--settings", str(settings)])
+    # 全局 settings 里的 env.CLAUDE_CODE_EFFORT_LEVEL 会压过 --effort 参数，
+    # 所以复制一份 settings、只改这个变量，再作为命令行 settings（优先于用户 settings）传入。
+    try:
+        merged = json.loads(settings.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        merged = {}
+    if not isinstance(merged, dict):
+        merged = {}
+    env = merged.get("env") if isinstance(merged.get("env"), dict) else {}
+    env["CLAUDE_CODE_EFFORT_LEVEL"] = effort
+    merged["env"] = env
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as handle:
+        json.dump(merged, handle, ensure_ascii=False)
+        settings_path = Path(handle.name)
+    args.extend(["--settings", str(settings_path)])
     if model and explicit_model:
         args.extend(["--model", model])
     fallback_model = os.environ.get("FOLIO_SCRIBE_CLAUDE_FALLBACK_MODEL", "")
@@ -487,6 +503,8 @@ def run_claude(prompt: str, content_path: Path, fallback_label: str, model: str,
         result = subprocess.run(args, text=True, capture_output=True, check=False, timeout=ai_timeout())
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"Claude CLI timed out after {exc.timeout}s") from exc
+    finally:
+        settings_path.unlink(missing_ok=True)
     if result.returncode != 0:
         if result.stdout:
             print(result.stdout[:3000], file=sys.stderr)

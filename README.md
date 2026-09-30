@@ -536,7 +536,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 | `FOLIO_SCRIBE_WATCHLIST_LIMIT` | `24` | Maximum dynamic candidates passed to the AI |
 | `FOLIO_SCRIBE_HK_WATCHLIST` | unset | Optional manual HK candidate symbols appended to or used instead of dynamic candidates |
 | `FOLIO_SCRIBE_US_WATCHLIST` | unset | Optional manual US candidate symbols appended to or used instead of dynamic candidates |
-| `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print-mode budget cap |
+| `FOLIO_SCRIBE_MAX_BUDGET_USD` | unset | Optional Claude Code print-mode budget cap; unset means no cap. The CLI checks it only after the reply is generated, so exceeding it discards the output |
+| `FOLIO_SCRIBE_CLAUDE_EFFORT` | `xhigh` | Claude Code effort for scheduled runs (`low`/`medium`/`high`/`xhigh`/`max`), independent of the interactive default |
 | `FOLIO_SCRIBE_LANG` | `zh` | Output language (`en` / `zh`) |
 
 ## 🔒 Safety Boundaries
@@ -963,7 +964,8 @@ skill/folio-scribe/scripts/install_schedule.sh uninstall
 | `FOLIO_SCRIBE_WATCHLIST_LIMIT` | `24` | 传给 AI 的动态候选数量上限 |
 | `FOLIO_SCRIBE_HK_WATCHLIST` | 未设置 | 可选手动港股候选，追加到动态候选；`manual` 模式下只使用它 |
 | `FOLIO_SCRIBE_US_WATCHLIST` | 未设置 | 可选手动美股候选，追加到动态候选；`manual` 模式下只使用它 |
-| `FOLIO_SCRIBE_MAX_BUDGET_USD` | `0.80` | Claude Code print 模式预算上限 |
+| `FOLIO_SCRIBE_MAX_BUDGET_USD` | 未设置 | 可选的 Claude Code print 模式预算上限，未设置即不限；CLI 在回答生成后才检查，超限会丢弃整段输出 |
+| `FOLIO_SCRIBE_CLAUDE_EFFORT` | `xhigh` | 定时任务的 Claude 思考强度（`low`/`medium`/`high`/`xhigh`/`max`），不跟随交互会话的默认设置 |
 | `FOLIO_SCRIBE_LANG` | `zh` | 输出语言（`en` / `zh`） |
 
 ### 安全边界

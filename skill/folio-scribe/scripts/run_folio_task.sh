@@ -56,6 +56,8 @@ CLAUDE="${FOLIO_SCRIBE_CLAUDE:-$(command -v claude 2>/dev/null || echo /opt/home
 CLAUDE_SETTINGS="${FOLIO_SCRIBE_CLAUDE_SETTINGS:-$HOME/.claude/settings.json}"
 CLAUDE_BARE="${FOLIO_SCRIBE_CLAUDE_BARE:-0}"
 CLAUDE_BARE=$(printf '%s' "$CLAUDE_BARE" | tr '[:upper:]' '[:lower:]')
+CLAUDE_EFFORT="${FOLIO_SCRIBE_CLAUDE_EFFORT:-xhigh}"   # 定时任务单独的思考强度，不跟随交互会话的默认值
+CLAUDE_EFFORT=$(printf '%s' "$CLAUDE_EFFORT" | tr '[:upper:]' '[:lower:]')
 CODEX="${FOLIO_SCRIBE_CODEX:-$(command -v codex 2>/dev/null || echo /opt/homebrew/bin/codex)}"
 CODEX_CONFIG="${FOLIO_SCRIBE_CODEX_CONFIG:-$HOME/.codex/config.toml}"
 CODEX_PROFILE="${FOLIO_SCRIBE_CODEX_PROFILE:-}"
@@ -80,7 +82,7 @@ MAX_OPEND_WAIT=90
 MAX_SNAPSHOT_READY_WAIT="${FOLIO_SCRIBE_SNAPSHOT_READY_WAIT:-60}"
 SNAPSHOT_READY_INTERVAL="${FOLIO_SCRIBE_SNAPSHOT_READY_INTERVAL:-5}"
 AI_TIMEOUT_SECONDS="${FOLIO_SCRIBE_AI_TIMEOUT_SECONDS:-300}"
-MAX_BUDGET="${FOLIO_SCRIBE_MAX_BUDGET_USD:-0.80}"
+MAX_BUDGET="${FOLIO_SCRIBE_MAX_BUDGET_USD:-}"   # 留空 = 不设上限；单轮调用超限时 CLI 只会丢弃已生成的结果
 MAX_TURNS=20
 AI_MODEL="${FOLIO_SCRIBE_AI_MODEL:-}"
 AI_MODEL_EXPLICIT=0
@@ -152,6 +154,11 @@ case "$DETERMINISTIC_FALLBACK" in
     0|false|no|off|"") DETERMINISTIC_FALLBACK=0 ;;
     1|true|yes|on) DETERMINISTIC_FALLBACK=1 ;;
     *) echo "ERROR: Unsupported FOLIO_SCRIBE_DETERMINISTIC_FALLBACK '$DETERMINISTIC_FALLBACK'. Use: 0|1"; exit 1 ;;
+esac
+
+case "$CLAUDE_EFFORT" in
+    low|medium|high|xhigh|max) ;;
+    *) echo "ERROR: Unsupported FOLIO_SCRIBE_CLAUDE_EFFORT '$CLAUDE_EFFORT'. Use: low|medium|high|xhigh|max"; exit 1 ;;
 esac
 
 case "$NOTIFY" in
@@ -2233,21 +2240,41 @@ run_claude_cli() {
     local args=(
         -p "$PROMPT"
         --max-turns "$MAX_TURNS"
-        --max-budget-usd "$MAX_BUDGET"
         --no-session-persistence
         --output-format json
         --tools ""
     )
+    if [ -n "$MAX_BUDGET" ]; then
+        args+=(--max-budget-usd "$MAX_BUDGET")
+    fi
     case "$CLAUDE_BARE" in
         1|true|yes|on)
             args+=(--bare)
             echo "Claude Code bare mode: enabled"
             ;;
     esac
-    if [ -r "$CLAUDE_SETTINGS" ]; then
-        args+=(--settings "$CLAUDE_SETTINGS")
-        echo "Claude Code settings: $CLAUDE_SETTINGS"
-    fi
+    # 全局 settings 里的 env.CLAUDE_CODE_EFFORT_LEVEL 会压过 --effort 参数，
+    # 所以复制一份 settings、只改这个变量，再作为命令行 settings（优先于用户 settings）传入。
+    local claude_settings_file="$SENSITIVE_TMP_DIR/claude-settings.json"
+    python3 - "$CLAUDE_SETTINGS" "$CLAUDE_EFFORT" "$claude_settings_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source, effort, target = sys.argv[1:4]
+try:
+    settings = json.loads(Path(source).read_text(encoding="utf-8"))
+except (OSError, ValueError):
+    settings = {}
+if not isinstance(settings, dict):
+    settings = {}
+env = settings.get("env") if isinstance(settings.get("env"), dict) else {}
+env["CLAUDE_CODE_EFFORT_LEVEL"] = effort
+settings["env"] = env
+Path(target).write_text(json.dumps(settings, ensure_ascii=False), encoding="utf-8")
+PY
+    args+=(--settings "$claude_settings_file")
+    echo "Claude Code settings: $CLAUDE_SETTINGS (effort: $CLAUDE_EFFORT)"
     if [ -n "$claude_model" ] && [ "$claude_model_explicit" -eq 1 ]; then
         args+=(--model "$claude_model")
         echo "Claude Code model: $claude_model"
@@ -2274,6 +2301,10 @@ run_claude_cli() {
         local status=$?
         echo "ERROR: Claude CLI failed (exit $status)."
         capture_failure_reason "$claude_json"
+        # 超时提示走 stderr，不在 claude_json 里；补上，免得通知里原因为空
+        if [ -z "$AI_LAST_FAILURE_REASON" ] && [ "$status" -eq 124 ]; then
+            AI_LAST_FAILURE_REASON="command timed out after ${AI_TIMEOUT_SECONDS}s: $CLAUDE"
+        fi
         if [ -s "$claude_json" ]; then
             echo "Claude output before failure:"
             print_cli_failure_excerpt "$claude_json"

@@ -6,11 +6,14 @@ All notable changes to folio-scribe are documented here.
 
 ### Added
 - 2027 Hong Kong holiday coverage for the bundled market calendar.
+- `FOLIO_SCRIBE_CLAUDE_EFFORT` (default `xhigh`) sets the Claude Code effort for scheduled runs and periodic summaries, independent of the interactive default. The runner passes a copy of the user settings with `env.CLAUDE_CODE_EFFORT_LEVEL` overridden, because that setting takes precedence over `--effort`.
 
 ### Changed
+- `FOLIO_SCRIBE_MAX_BUDGET_USD` is now unset by default, so no budget cap is passed. Claude Code checks the cap only after a single-turn reply is generated, so exceeding it spent the tokens and then discarded the output.
 - `sync_tradingweb.sh` fails closed: it runs the vault secrets guard (`FOLIO_SCRIBE_SECRETS_GUARD`, default `<vault>/_tools/check_secrets.py`) before building and on the built output before deploying, and aborts with exit 1 if either scan fails or the guard is missing.
 
 ### Fixed
+- Degradation notifications now include the reason when the Claude CLI times out; the timeout message went to stderr and the reason field was empty.
 - IBKR account ids no longer reach AI prompts, deterministic-fallback tables, IBKR error lines, runner logs, or notes. The runner replaces them with `U****（主）`/`U****（次）` aliases (largest total assets = 主) right after reading the snapshot, and the Daily/Weekly/Monthly writers mask any remaining IBKR-style id as `U****`.
 - The package writer `folio_scribe.journal.obsidian.write_daily_note` now masks IBKR-style account ids as `U****` too (new `folio_scribe.privacy.mask_account_ids`), matching the bundled skill writer.
 - Scheduled runners now use a per-task lock, private temp directory cleanup, and AI CLI wall-clock timeouts.
